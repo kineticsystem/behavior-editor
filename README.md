@@ -9,6 +9,7 @@
   - [Build the Project](#build-the-project)
 - [Running the Application](#running-the-application)
 - [Using the Editor](#using-the-editor)
+- [Running a Tree on the Robot](#running-a-tree-on-the-robot)
 - [How Files Are Read and Written](#how-files-are-read-and-written)
 - [Validation](#validation)
 - [Your Own Node Types](#your-own-node-types)
@@ -75,19 +76,31 @@ test
 
 ## Running the Application
 
-Start the editor, then open <http://localhost:8080> in a browser.
+Inside the container, start the editor, then open <http://localhost:8080> in a browser.
 
 ```
 serve
 ```
 
-Outside the container, set the folder and the port yourself:
+From outside the container, the same can be done in one step: this starts the container, installs the dependencies, builds and serves the editor. Stop it with `Ctrl+C`.
+
+```
+./docker/dock.sh editor serve ~/my_robot/behaviors
+```
+
+To use another port, choose it when starting the container: inside the container the editor always runs on port 8080, and `EDITOR_PORT` sets the port of the host it is published on.
+
+```
+EDITOR_PORT=9000 ./docker/dock.sh editor serve ~/my_robot/behaviors
+```
+
+Without Docker, set the folder and the port with `BEHAVIORS_DIR` and `PORT`:
 
 ```
 BEHAVIORS_DIR=~/my_robot/behaviors PORT=8080 ./bin/serve.sh
 ```
 
-We can open another folder from the editor too, by clicking the folder path at the top left.
+We can open another folder from the editor too, by clicking the folder path at the top left. In Docker, the editor only sees the folder mounted when the container was started, at `~/behaviors`: to edit a folder outside it, start the container again with that folder, e.g. `./docker/dock.sh editor serve ~/other_robot/behaviors`.
 
 > [!IMPORTANT]
 > The server listens on all network interfaces, so anyone on the network can open it. On the host, add `HOST=127.0.0.1` to keep it to your machine.
@@ -97,6 +110,19 @@ We can open another folder from the editor too, by clicking the folder path at t
 - **Workspace** (left): **Objectives** lists the XML files of the folder and the trees in each. **Behaviors** lists our node types, declared in a `<TreeNodesModel>`, with how often each is used; click one to see its ports and where it is used, or drag it onto the tree. **Built-in nodes** lists BehaviorTree.CPP's own nodes (Sequence, Fallback, RetryUntilSuccessful…), which work the same way.
 - **Tree** (center): the selected tree as a collapsible list. Add nodes and SubTrees, drag them around, cut, copy, paste and undo. Open a SubTree to edit the tree it includes, and use the arrows at the top to go back. The **XML** tab shows the file as it will be saved.
 - **Details** (right): the selected node's name, ports, scripts (`_skipIf`, `_onSuccess`…) and notes, or, with no node selected, the tree's ID, description and ports.
+
+## Running a Tree on the Robot
+
+The **Run** button sends the open tree to a [BehaviorTree.ROS2](https://github.com/BehaviorTree/BehaviorTree.ROS2) server, which runs it on the robot. The editor talks to the server through [rosbridge](https://github.com/RobotWebTools/rosbridge_suite), so it needs no ROS itself; start rosbridge next to the server, e.g.:
+
+```
+ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+```
+
+The dialog lists the payload the tree reads, i.e. every `{@key}` of the global blackboard, with YAML values such as `3.0` or `[joint1, joint2]`. By default the editor connects to `ws://<host>:9090` and calls the action `/commander/execute_objective`; both can be changed under *Connection*.
+
+> [!IMPORTANT]
+> Unsaved changes are saved first, but a BehaviorTree.ROS2 server reads the tree files when it starts, and again only when one of its parameters changes. To run what you just saved, make the server reload them, e.g. by setting its folders to the same value: `ros2 param set /stepit_server behavior_trees "[stepit_objectives/objectives]"`.
 
 ## How Files Are Read and Written
 

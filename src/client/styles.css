@@ -278,7 +278,17 @@ button.root-path:hover > svg:last-child { opacity: 1; }
 .editor-header .breadcrumb > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 4; min-width: 0; }
 .editor-header .breadcrumb > b, .editor-header .breadcrumb > select { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 40px; }
 .editor-header .breadcrumb > span:not(:first-child), .editor-header .breadcrumb > button { flex-shrink: 0; }
-.editor-header > .segmented, .editor-header > .save-button { flex: none; }
+.editor-header > .segmented, .editor-header > .save-button, .editor-header > .run-button { flex: none; }
+.run-dialog h2 { display: flex; align-items: center; gap: 6px; }
+.run-dialog .run-payload { display: flex; flex-direction: column; gap: 10px; max-height: 40vh; overflow: auto; }
+.run-connection summary { cursor: pointer; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.run-connection fieldset { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.run-output { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; max-height: 35vh; overflow: auto; }
+.run-state { font-weight: 600; }
+.run-state.ok { color: var(--ok); }
+.run-state.failed { color: var(--error); }
+.run-feedback { margin: 0; padding-left: 18px; font-size: 12px; }
+.run-message { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px var(--mono); }
 .editor-header b { font-size: 14px; }
 
 .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
