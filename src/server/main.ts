@@ -28,7 +28,7 @@ if (!existsSync(join(DIST, 'index.html'))) {
 const root = behaviorsRoot();
 const api = createApi(root);
 
-createServer((req, res) => {
+const server = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
   if (url.pathname.startsWith('/api/')) {
     void api(req, res);
@@ -41,7 +41,22 @@ createServer((req, res) => {
   res.setHeader('Content-Type', TYPES[extname(file)] ?? 'application/octet-stream');
   createReadStream(file).pipe(res);
 }).listen(PORT, HOST, () => {
-  // In the container, the port published on the host may differ.
-  console.log(`Behavior editor on http://localhost:${process.env.EDITOR_PORT ?? PORT}`);
+  // In the container, EDITOR_PORT is the host port that docker publishes as the
+  // container's port 8080: any other port is unreachable from the host.
+  const published = process.env.EDITOR_PORT;
+  if (!published) {
+    console.log(`Behavior editor on http://localhost:${PORT}`);
+  } else if (PORT === 8080) {
+    console.log(`Behavior editor on http://localhost:${published}`);
+  } else {
+    console.warn(`Listening on port ${PORT} of the container, which docker does not publish.`);
+    console.warn('To change the port, start the container with EDITOR_PORT=<port> ./docker/dock.sh ...');
+  }
   console.log(`Behaviors folder: ${root}`);
+});
+
+server.on('error', (e: NodeJS.ErrnoException) => {
+  if (e.code !== 'EADDRINUSE') throw e;
+  console.error(`Port ${PORT} is already in use. Choose another one with PORT=<port>.`);
+  process.exit(1);
 });

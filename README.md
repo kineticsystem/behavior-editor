@@ -75,19 +75,31 @@ test
 
 ## Running the Application
 
-Start the editor, then open <http://localhost:8080> in a browser.
+Inside the container, start the editor, then open <http://localhost:8080> in a browser.
 
 ```
 serve
 ```
 
-Outside the container, set the folder and the port yourself:
+From outside the container, the same can be done in one step: this starts the container, installs the dependencies, builds and serves the editor. Stop it with `Ctrl+C`.
+
+```
+./docker/dock.sh editor serve ~/my_robot/behaviors
+```
+
+To use another port, choose it when starting the container: inside the container the editor always runs on port 8080, and `EDITOR_PORT` sets the port of the host it is published on.
+
+```
+EDITOR_PORT=9000 ./docker/dock.sh editor serve ~/my_robot/behaviors
+```
+
+Without Docker, set the folder and the port with `BEHAVIORS_DIR` and `PORT`:
 
 ```
 BEHAVIORS_DIR=~/my_robot/behaviors PORT=8080 ./bin/serve.sh
 ```
 
-We can open another folder from the editor too, by clicking the folder path at the top left.
+We can open another folder from the editor too, by clicking the folder path at the top left. In Docker, the editor only sees the folder mounted when the container was started, at `~/behaviors`: to edit a folder outside it, start the container again with that folder, e.g. `./docker/dock.sh editor serve ~/other_robot/behaviors`.
 
 > [!IMPORTANT]
 > The server listens on all network interfaces, so anyone on the network can open it. On the host, add `HOST=127.0.0.1` to keep it to your machine.
