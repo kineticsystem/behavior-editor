@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="Main">
+  <BehaviorTree ID="Main" _description="Keeps delivering objects while the battery lasts.">
+    <Fallback name="root">
+      <ReactiveSequence name="work">
+        <IsBatteryOk min_level="25"/>
+        <Repeat num_cycles="-1">
+          <SubTree ID="PickAndPlace" object="cup" destination="{table}"/>
+        </Repeat>
+      </ReactiveSequence>
+      <SubTree ID="Recharge" _autoremap="true"/>
+    </Fallback>
+  </BehaviorTree>
+</root>

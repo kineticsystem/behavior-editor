@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="Bad">
+  <BehaviorTree ID="Bad">
+    <Sequence>
+      <MoveTo goal="{g}" height="3"/>
+      <Fly/>
+      <Inverter/>
+      <Repeat num_cycles="many"><AlwaysSuccess/></Repeat>
+      <SubTree ID="Loop"/>
+      <SubTree ID="Missing"/>
+    </Sequence>
+  </BehaviorTree>
+  <BehaviorTree ID="Loop">
+    <SubTree ID="Bad"/>
+  </BehaviorTree>
+  <TreeNodesModel>
+    <Action ID="MoveTo">
+      <input_port name="goal"/>
+    </Action>
+  </TreeNodesModel>
+</root>

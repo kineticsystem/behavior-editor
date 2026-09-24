@@ -1,0 +1,30 @@
+# Definition of the development container. Driven by ./dock.sh, which supplies
+# CONTAINER_NAME, USER_UID/USER_GID and BEHAVIORS_HOST_DIR.
+
+services:
+  dev:
+    build:
+      context: .
+      args:
+        # A uid/gid matching the host user keeps the bind-mounted workspace
+        # writable and correctly owned on the host.
+        USER_UID: ${USER_UID:-1000}
+        USER_GID: ${USER_GID:-1000}
+    image: ${CONTAINER_NAME:-behavior-editor}:latest
+    container_name: ${CONTAINER_NAME:-behavior-editor}
+    hostname: ${CONTAINER_NAME:-behavior-editor}
+    ports:
+      # The editor (serve.sh) and the Vite development server (dev.sh).
+      - "${EDITOR_PORT:-8080}:8080"
+      - "${DEV_PORT:-5173}:5173"
+    volumes:
+      # Relative paths resolve against this file's directory, so this is the
+      # repo root whatever machine it is checked out on.
+      - ..:/home/developer/ws
+      # The folder of behaviors to edit. Defaults to the examples in the repo.
+      - ${BEHAVIORS_HOST_DIR:-../behaviors}:/home/developer/behaviors
+    environment:
+      # The host port, for the server to print the address to open.
+      EDITOR_PORT: ${EDITOR_PORT:-8080}
+    # Keep the container alive so shells can be attached to it on demand.
+    command: sleep infinity

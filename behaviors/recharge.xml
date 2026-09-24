@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="Recharge">
+  <BehaviorTree ID="Recharge">
+    <Sequence>
+      <Say message="Battery low, going to charge"/>
+      <Dock station="{charging_station}"/>
+      <Timeout msec="600000">
+        <Charge target_level="95"/>
+      </Timeout>
+    </Sequence>
+  </BehaviorTree>
+</root>

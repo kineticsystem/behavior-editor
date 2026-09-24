@@ -1,0 +1,32 @@
+{
+  "name": "behavior-editor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A tree editor for BehaviorTree.CPP behaviors",
+  "type": "module",
+  "packageManager": "pnpm@11.1.1",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "start": "tsx src/server/main.ts",
+    "test": "vitest run",
+    "validate": "tsx src/cli/validate.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.12",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}
