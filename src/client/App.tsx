@@ -17,6 +17,9 @@ function Toasts() {
   );
 }
 
+/** The narrowest the side panels get, whether dragged or squeezed by a small window. */
+const SIDE_MIN = 160;
+
 export function App() {
   const loading = useStore((s) => s.loading);
   const loadError = useStore((s) => s.loadError);
@@ -77,13 +80,17 @@ export function App() {
   }
 
   return (
-    <div className="app" style={{ gridTemplateColumns: `${left}px 4px minmax(360px, 1fr) 4px ${right}px` }}>
+    // The dragged widths are what the side panels would like: in a small window
+    // they give up room too, down to SIDE_MIN, rather than crushing the tree.
+    <div className="app" style={{
+      gridTemplateColumns: `minmax(${SIDE_MIN}px, ${left}px) 4px minmax(320px, 1fr) 4px minmax(${SIDE_MIN}px, ${right}px)`,
+    }}>
       <Browser />
-      <Splitter direction="columns" label="Resize the workspace panel" value={left} onChange={setLeft} grow={1} min={200} max={640} />
+      <Splitter direction="columns" label="Resize the workspace panel" value={left} onChange={setLeft} grow={1} min={SIDE_MIN} max={640} />
       {loading && !Object.keys(useStore.getState().files).length
         ? <main className="panel placeholder">Loading…</main>
         : <TreeEditor analysis={analysis} />}
-      <Splitter direction="columns" label="Resize the details panel" value={right} onChange={setRight} grow={-1} min={240} max={720} />
+      <Splitter direction="columns" label="Resize the details panel" value={right} onChange={setRight} grow={-1} min={SIDE_MIN} max={720} />
       <Inspector analysis={analysis} />
       <DialogHost />
       <Toasts />
