@@ -9,6 +9,8 @@ const paths: Record<string, string> = {
   trash: 'M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5',
   up: 'M8 13V3M4 7l4-4 4 4',
   down: 'M8 3v10M4 9l4 4 4-4',
+  back: 'M13 8H3M7 4L3 8l4 4',
+  forward: 'M3 8h10M9 4l4 4-4 4',
   undo: 'M5 3L2 6l3 3M2.5 6H10a3.5 3.5 0 010 7H7',
   redo: 'M11 3l3 3-3 3M13.5 6H6a3.5 3.5 0 000 7h3',
   copy: 'M5.5 5.5h7v7h-7zM3.5 10.5v-7h7',

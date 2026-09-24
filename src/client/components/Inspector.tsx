@@ -92,7 +92,6 @@ function PortField({ port, value, onChange, issues }: {
   onChange: (value: string | undefined) => void;
   issues: Issue[];
 }) {
-  const ref = `{${port.name}}`;
   return (
     <TextField
       label={<>
@@ -106,10 +105,6 @@ function PortField({ port, value, onChange, issues }: {
       hint={port.description}
       onChange={onChange}
       issues={issues}
-      actions={
-        <button className="icon-button" tabIndex={-1} title={`Use the blackboard entry ${ref}`}
-          onClick={() => onChange(value === ref ? undefined : ref)}>{'{}'}</button>
-      }
     />
   );
 }

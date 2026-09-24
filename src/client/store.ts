@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { NativeResult } from '../server/native';
 import { BUILTIN_MODELS } from '../shared/builtins';
 import type { BTDocument, BTNode, NodeModel, ParseError } from '../shared/types';
+import { locate } from '../shared/treeOps';
 import { newDocument, parseDocument, serializeDocument, trees } from '../shared/xml';
 import { api } from './api';
 
@@ -27,6 +28,14 @@ export interface Selection {
   tree?: string;
   /** The uid of the selected node; none selects the tree itself. */
   node?: string;
+}
+
+/**
+ * A tree opened earlier, for Back and Forward. The tree ID is kept besides the
+ * uid because reloading the folder parses the files again, with new uids.
+ */
+export interface HistoryEntry extends Selection {
+  treeId?: string;
 }
 
 /** A node of an included tree, clicked inside an expanded SubTree: shown read-only. */
@@ -60,6 +69,10 @@ interface State {
   builtins: NodeModel[];
   nativeAvailable: boolean;
   selection: Selection;
+  /** The trees opened before the current one, most recent last. */
+  back: HistoryEntry[];
+  /** The trees left with Back, most recent last. */
+  forward: HistoryEntry[];
   peek?: Peek;
   /** A node type clicked in the Behaviors list, shown in the right panel. */
   focusModel?: string;
@@ -71,10 +84,15 @@ interface State {
   toasts: Toast[];
 
   load(): Promise<void>;
+  /** Opens another folder, dropping everything of the current one, unsaved edits included. */
+  openFolder(path: string): Promise<void>;
   select(selection: Selection): void;
   setPeek(peek: Peek): void;
   setFocusModel(id: string): void;
   selectFile(path: string): void;
+  /** Opens the tree shown before the current one, or the one left with Back. */
+  goBack(): void;
+  goForward(): void;
   edit(path: string, change: (doc: BTDocument) => void | false, coalesceKey?: string): void;
   undo(path: string): void;
   redo(path: string): void;
@@ -124,6 +142,38 @@ export function defaultTree(doc: BTDocument | undefined): string | undefined {
 
 let toastId = 0;
 
+const HISTORY_LIMIT = 50;
+
+function entry(s: State, selection: Selection): HistoryEntry {
+  const doc = selection.file ? s.files[selection.file]?.doc : undefined;
+  const tree = doc && trees(doc).find((t) => t.uid === selection.tree);
+  return { ...selection, treeId: tree?.id };
+}
+
+/** The history once `next` is selected: opening another tree records the current one. */
+function leaving(s: State, next: Selection): Partial<State> {
+  const current = s.selection;
+  if (!current.file || (current.file === next.file && current.tree === next.tree)) return {};
+  return { back: [...s.back, entry(s, current)].slice(-HISTORY_LIMIT), forward: [] };
+}
+
+/** The most recent entry of a history that still exists, skipping deleted files and trees. */
+function lastValid(s: State, history: HistoryEntry[]): { selection: Selection; index: number } | undefined {
+  for (let index = history.length - 1; index >= 0; index--) {
+    const h = history[index];
+    const doc = h.file ? s.files[h.file]?.doc : undefined;
+    if (!doc) continue;
+    const all = trees(doc);
+    const byUid = all.find((t) => t.uid === h.tree);
+    const tree = byUid ?? all.find((t) => t.id === h.treeId);
+    if (!tree) continue;
+    // A node deleted since, or renumbered by a reload, leaves the tree itself selected.
+    const node = h.node && locate(tree, h.node) ? h.node : undefined;
+    return { selection: { file: h.file, tree: tree.uid, node }, index };
+  }
+  return undefined;
+}
+
 export const useStore = create<State>((set, get) => ({
   root: '',
   loading: true,
@@ -131,6 +181,8 @@ export const useStore = create<State>((set, get) => ({
   builtins: BUILTIN_MODELS,
   nativeAvailable: false,
   selection: {},
+  back: [],
+  forward: [],
   collapsed: {},
   openSubtrees: {},
   native: { running: false },
@@ -170,8 +222,24 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  async openFolder(path) {
+    try {
+      await api.openFolder(path);
+    } catch (e) {
+      get().toast(`Cannot open ${path}: ${e instanceof Error ? e.message : e}`, 'error');
+      return;
+    }
+    // Everything refers to the files of the old folder; load() would otherwise
+    // keep their unsaved edits and apply them to same-named files here.
+    set({
+      files: {}, selection: {}, back: [], forward: [], peek: undefined, focusModel: undefined,
+      collapsed: {}, openSubtrees: {}, native: { running: false },
+    });
+    await get().load();
+  },
+
   select(selection) {
-    set({ selection, peek: undefined, focusModel: undefined });
+    set({ selection, ...leaving(get(), selection), peek: undefined, focusModel: undefined });
   },
 
   setPeek(peek) {
@@ -183,7 +251,34 @@ export const useStore = create<State>((set, get) => ({
   },
 
   selectFile(path) {
-    set({ selection: { file: path, tree: defaultTree(get().files[path]?.doc) }, peek: undefined, focusModel: undefined });
+    const selection = { file: path, tree: defaultTree(get().files[path]?.doc) };
+    set({ selection, ...leaving(get(), selection), peek: undefined, focusModel: undefined });
+  },
+
+  goBack() {
+    const { back, forward, selection } = get();
+    const found = lastValid(get(), back);
+    if (!found) {
+      set({ back: [] });
+      return;
+    }
+    set({
+      selection: found.selection, back: back.slice(0, found.index),
+      forward: [...forward, entry(get(), selection)], peek: undefined, focusModel: undefined,
+    });
+  },
+
+  goForward() {
+    const { back, forward, selection } = get();
+    const found = lastValid(get(), forward);
+    if (!found) {
+      set({ forward: [] });
+      return;
+    }
+    set({
+      selection: found.selection, forward: forward.slice(0, found.index),
+      back: [...back, entry(get(), selection)], peek: undefined, focusModel: undefined,
+    });
   },
 
   edit(path, change, coalesceKey) {

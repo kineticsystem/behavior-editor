@@ -9,6 +9,7 @@ import type { NodeModel } from '../../shared/types';
 import { type FileState, isDirty, useStore } from '../store';
 import { CategoryBadge, Counts, Icon } from './icons';
 import { MODEL_MIME, setDraggedModel } from '../dnd';
+import { openFolderDialog } from './FolderDialog';
 import { SettingsMenu } from './SettingsMenu';
 import { Splitter, useStoredSize } from './Splitter';
 
@@ -161,7 +162,9 @@ export function Browser() {
           <SettingsMenu />
         </div>
       </header>
-      <div className="root-path" title={root}><Icon name="folder" size={14} /> <span>{root}</span></div>
+      <button className="root-path" title={`${root}\nClick to open another folder`} onClick={openFolderDialog}>
+        <Icon name="folder" size={14} /> <span>{root}</span> <Icon name="open" size={12} />
+      </button>
 
       <section {...layout('objectives')}>
         <SectionHeader title="Objectives" count={paths.length} open={sections.objectives} onToggle={() => toggle('objectives')}>

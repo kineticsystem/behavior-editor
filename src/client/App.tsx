@@ -32,8 +32,15 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       if (useDialog.getState().content) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (!mod) return;
       const inField = (e.target as HTMLElement).closest?.('input, textarea, select');
+      // Like a browser, but between trees; it also keeps the browser from leaving the page.
+      if (e.altKey && !mod && !e.shiftKey && !inField && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        if (e.key === 'ArrowLeft') useStore.getState().goBack();
+        else useStore.getState().goForward();
+        return;
+      }
+      if (!mod) return;
       const key = e.key.toLowerCase();
       if (key === 's') {
         e.preventDefault();

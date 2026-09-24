@@ -6,9 +6,11 @@
 //   DELETE /api/file?path=a.xml   Delete a file
 //   POST   /api/validate          Validate with BehaviorTree.CPP
 //                                 (body: {files: [{path, content}]})
+//   GET    /api/folders?path=/a   The sub-folders of a folder, to choose one
+//   PUT    /api/root              Open another folder (body: {path})
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { NodeModel } from '../shared/types';
@@ -26,6 +28,15 @@ export interface WorkspaceResponse {
   /** Built-in models from the installed BehaviorTree.CPP, when available. */
   builtins?: NodeModel[];
   nativeValidator: boolean;
+}
+
+export interface FoldersResponse {
+  path: string;
+  /** Undefined at the top of the file system. */
+  parent?: string;
+  folders: string[];
+  /** The number of XML files directly in the folder. */
+  xmlFiles: number;
 }
 
 class HttpError extends Error {
@@ -70,6 +81,29 @@ export async function readBehaviorFiles(root: string, paths: string[]): Promise<
   return files.filter((f) => isBehaviorFile(f.content));
 }
 
+/** Resolves an absolute folder path, refusing anything that is not an existing folder. */
+async function folderPath(path: unknown): Promise<string> {
+  if (typeof path !== 'string' || !path || path.includes('\0')) throw new HttpError(400, 'Missing path');
+  if (!isAbsolute(path)) throw new HttpError(400, 'The path must be absolute');
+  const full = resolve(path);
+  const info = await stat(full).catch(() => undefined);
+  if (!info?.isDirectory()) throw new HttpError(400, `Not a folder: ${full}`);
+  return full;
+}
+
+async function listFolders(path: string): Promise<FoldersResponse> {
+  const entries = await readdir(path, { withFileTypes: true }).catch(() => {
+    throw new HttpError(403, `Cannot read ${path}`);
+  });
+  const folders = entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
+    .map((e) => e.name)
+    .sort((a, b) => a.localeCompare(b));
+  const xmlFiles = entries.filter((e) => e.isFile() && e.name.toLowerCase().endsWith('.xml')).length;
+  const parent = dirname(path);
+  return { path, parent: parent === path ? undefined : parent, folders, xmlFiles };
+}
+
 async function body(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -83,7 +117,8 @@ function send(res: ServerResponse, status: number, data: unknown) {
   res.end(JSON.stringify(data));
 }
 
-export function createApi(root: string) {
+export function createApi(initialRoot: string) {
+  let root = resolve(initialRoot);
   let builtins: Promise<NodeModel[] | undefined> | undefined;
 
   return async function api(req: IncomingMessage, res: ServerResponse, next?: () => void) {
@@ -115,6 +150,13 @@ export function createApi(root: string) {
         const { files } = JSON.parse(await body(req)) as { files: WorkspaceFile[] };
         for (const f of files) safePath(root, f.path);
         send(res, 200, await validateNative(files));
+      } else if (route === 'GET /api/folders') {
+        send(res, 200, await listFolders(await folderPath(url.searchParams.get('path') ?? root)));
+      } else if (route === 'PUT /api/root') {
+        const { path } = JSON.parse(await body(req)) as { path?: unknown };
+        root = await folderPath(path);
+        console.log(`Behaviors folder: ${root}`);
+        send(res, 200, { root });
       } else {
         send(res, 404, { error: `No route ${route}` });
       }
