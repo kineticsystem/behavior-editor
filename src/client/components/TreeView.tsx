@@ -133,6 +133,8 @@ export function TreeView({ analysis, path, tree }: { analysis: Analysis; path: s
 
   const onKeyDown = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement).closest('input, textarea, select')) return;
+    // Alt+← and Alt+→ are Back and Forward, handled by the app.
+    if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
     const editable = rows.filter((r) => !r.readonly);
     const index = editable.findIndex((r) => r.key === selectedKey);
     const row = editable[index];

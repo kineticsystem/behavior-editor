@@ -47,6 +47,17 @@ export function Splitter({ direction, value, onChange, grow, min, max = Infinity
     return Math.max(min, Math.min(max, room));
   };
   const clamp = (v: number, upper: number) => Math.min(upper, Math.max(min, v));
+  /**
+   * The size the panel has on screen, which is less than `value` when a small
+   * window squeezes it: dragging starts from there, or the first pixels of a
+   * drag would change nothing visible.
+   */
+  const shown = (el: HTMLElement) => {
+    const panel = grow > 0 ? el.previousElementSibling : el.nextElementSibling;
+    if (!panel) return value;
+    const box = panel.getBoundingClientRect();
+    return Math.min(value, horizontal ? box.width : box.height);
+  };
 
   return (
     <div
@@ -57,7 +68,7 @@ export function Splitter({ direction, value, onChange, grow, min, max = Infinity
       aria-valuenow={Math.round(value)}
       tabIndex={0}
       onPointerDown={(e) => {
-        start.current = { at: horizontal ? e.clientX : e.clientY, value, limit: limit(e.currentTarget) };
+        start.current = { at: horizontal ? e.clientX : e.clientY, value: shown(e.currentTarget), limit: limit(e.currentTarget) };
         e.currentTarget.setPointerCapture(e.pointerId);
       }}
       onPointerMove={(e) => {
@@ -72,7 +83,7 @@ export function Splitter({ direction, value, onChange, grow, min, max = Infinity
         if (i < 0) return;
         e.preventDefault();
         const step = (i === 1 ? 1 : -1) * grow * (e.shiftKey ? 64 : 16);
-        onChange(clamp(value + step, limit(e.currentTarget)));
+        onChange(clamp(shown(e.currentTarget) + step, limit(e.currentTarget)));
       }}
     />
   );

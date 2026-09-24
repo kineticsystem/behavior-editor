@@ -11,7 +11,7 @@ import {
 } from '../actions';
 import { ID_PATTERN, prompt } from '../dialogs';
 import type { Analysis } from '../hooks';
-import { isDirty, useStore } from '../store';
+import { type HistoryEntry, isDirty, useStore } from '../store';
 import { openAddDialog } from './AddNodeDialog';
 import { BadgeLegend, CategoryBadge, Icon } from './icons';
 import { Problems } from './Problems';
@@ -19,13 +19,34 @@ import { Splitter, useStoredSize } from './Splitter';
 import { TreeView } from './TreeView';
 import { XmlView } from './XmlView';
 
-function ToolButton(props: { icon: string; label: string; shortcut?: string; onClick: () => void; disabled?: boolean; text?: boolean }) {
+function ToolButton(props: { icon: string; label: string; tooltip?: string; shortcut?: string; onClick: () => void; disabled?: boolean; text?: boolean }) {
+  const title = props.tooltip ?? props.label;
   return (
-    <button className={props.text ? 'tool tool-text' : 'tool'} title={props.shortcut ? `${props.label} (${props.shortcut})` : props.label}
+    <button className={props.text ? 'tool tool-text' : 'tool'} title={props.shortcut ? `${title} (${props.shortcut})` : title}
       aria-label={props.label} onClick={props.onClick} disabled={props.disabled}>
       <Icon name={props.icon} size={15} />
       {props.text && <span>{props.label}</span>}
     </button>
+  );
+}
+
+/** Back and Forward between the trees opened, e.g. from a SubTree to the tree that includes it. */
+function HistoryButtons() {
+  const back = useStore((s) => s.back);
+  const forward = useStore((s) => s.forward);
+  const label = (verb: string, h: HistoryEntry | undefined, shortcut: string) =>
+    h ? `${verb} to ${h.treeId || 'the previous tree'}${h.file ? ` (${h.file})` : ''} (${shortcut})` : verb;
+  return (
+    <div className="history-buttons">
+      <button className="icon-button" title={label('Back', back.at(-1), 'Alt+←')} aria-label="Back"
+        disabled={!back.length} onClick={() => useStore.getState().goBack()}>
+        <Icon name="back" size={15} />
+      </button>
+      <button className="icon-button" title={label('Forward', forward.at(-1), 'Alt+→')} aria-label="Forward"
+        disabled={!forward.length} onClick={() => useStore.getState().goForward()}>
+        <Icon name="forward" size={15} />
+      </button>
+    </div>
   );
 }
 
@@ -100,6 +121,7 @@ export function TreeEditor({ analysis }: { analysis: Analysis }) {
   return (
     <main className="panel editor">
       <header className="panel-header editor-header">
+        <HistoryButtons />
         {file ? (
           <div className="breadcrumb">
             <span className="muted">{file.path}</span>
@@ -141,8 +163,10 @@ export function TreeEditor({ analysis }: { analysis: Analysis }) {
           <ToolButton icon="undo" label="Undo" shortcut="Ctrl+Z" onClick={undo} disabled={!file.past.length} />
           <ToolButton icon="redo" label="Redo" shortcut="Ctrl+Shift+Z" onClick={redo} disabled={!file.future.length} />
           <span className="sep" />
-          <ToolButton icon="plus" label="Node" shortcut="A" text onClick={() => openAddDialog(ws, 'node')} />
-          <ToolButton icon="subtree" label="SubTree" shortcut="S" text onClick={() => openAddDialog(ws, 'subtree')} />
+          <ToolButton icon="plus" label="Node" shortcut="A" text onClick={() => openAddDialog(ws, 'node')}
+            tooltip="Add a node: a built-in one (Sequence, Fallback…), one of your node types, or a new node type. It goes inside the selected node, or after it if that node cannot have children" />
+          <ToolButton icon="subtree" label="SubTree" shortcut="S" text onClick={() => openAddDialog(ws, 'subtree')}
+            tooltip="Add a SubTree: include another tree of the workspace, which runs here as a single node. It goes where a new node would" />
           <span className="sep" />
           <ToolButton icon="up" label="Move up" shortcut="Alt+↑" onClick={() => shiftSelected(-1)} disabled={!hasNode} />
           <ToolButton icon="down" label="Move down" shortcut="Alt+↓" onClick={() => shiftSelected(1)} disabled={!hasNode} />
