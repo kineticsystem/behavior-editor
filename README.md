@@ -3,6 +3,8 @@
 A simple editor for [BehaviorTree.CPP](https://www.behaviortree.dev/) 4
 behaviors, like Groot2 but with a tree instead of a graph.
 
+![The behavior editor: the workspace on the left, the tree in the middle and the details of the selection on the right](docs/screenshot.png)
+
 - **Workspace** (left), in three resizable sections. **Objectives**: the XML files of the
   folder and the trees in each. **Behaviors**: the node types declared in a
   `<TreeNodesModel>` (your C++ nodes), with how often each is used; click one to
