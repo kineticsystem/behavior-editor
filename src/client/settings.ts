@@ -7,9 +7,15 @@ export type Theme = 'auto' | 'light' | 'dark';
 
 export interface Settings {
   theme: Theme;
+  /** Where rosbridge runs, e.g. ws://robot:9090; empty for port 9090 of the editor's host. */
+  rosbridgeUrl: string;
+  /** The ExecuteTree action of the BehaviorTree.ROS2 server that runs the trees. */
+  runAction: string;
+  /** The payload last used to run each tree, by tree ID and blackboard key. */
+  payloads: Record<string, Record<string, string>>;
 }
 
-const DEFAULTS: Settings = { theme: 'auto' };
+const DEFAULTS: Settings = { theme: 'auto', rosbridgeUrl: '', runAction: '/commander/execute_objective', payloads: {} };
 const KEY = 'be.settings';
 
 function load(): Settings {

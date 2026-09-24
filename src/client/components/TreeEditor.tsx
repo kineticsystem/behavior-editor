@@ -15,6 +15,7 @@ import { type HistoryEntry, isDirty, useStore } from '../store';
 import { openAddDialog } from './AddNodeDialog';
 import { BadgeLegend, CategoryBadge, Icon } from './icons';
 import { Problems } from './Problems';
+import { openRunDialog } from './RunDialog';
 import { Splitter, useStoredSize } from './Splitter';
 import { TreeView } from './TreeView';
 import { XmlView } from './XmlView';
@@ -150,6 +151,12 @@ export function TreeEditor({ analysis }: { analysis: Analysis }) {
               <button role="tab" aria-selected={showXml} className={showXml ? 'active' : ''}
                 onClick={() => setView('xml')}><Icon name="code" size={14} /> XML</button>
             </div>
+            {tree?.id && (
+              <button className="run-button" title={`Run ${tree.id} on the robot, through rosbridge`}
+                onClick={() => openRunDialog(ws, tree.id)}>
+                <Icon name="play" size={14} /> Run
+              </button>
+            )}
             <button className={`save-button ${isDirty(file) ? 'primary' : ''}`} disabled={!isDirty(file) || !file.doc}
               onClick={save} title="Save (Ctrl+S)">
               <Icon name="save" size={14} /> {isDirty(file) ? 'Save' : 'Saved'}
