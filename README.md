@@ -122,8 +122,10 @@ ros2 launch rosbridge_server rosbridge_websocket_launch.xml
 
 The dialog lists the payload the tree reads, i.e. every `{@key}` of the global blackboard, with YAML values such as `3.0` or `[joint1, joint2]`. By default the editor connects to `ws://<host>:9090` and calls the action `/commander/execute_objective`; both can be changed under *Connection*.
 
+Unsaved changes are saved first, and StepIt Commander reads the tree files again before each goal whenever one changed, so the tree runs as just saved, new files included.
+
 > [!IMPORTANT]
-> Unsaved changes are saved first, but a BehaviorTree.ROS2 server reads the tree files when it starts, and again only when one of its parameters changes. To run what you just saved, make the server reload them, e.g. by setting its folders to the same value: `ros2 param set /stepit_server behavior_trees "[stepit_objectives/objectives]"`.
+> Other BehaviorTree.ROS2 servers read the tree files when they start, and again only when one of their parameters changes. With them, make the server reload what you just saved before running it, e.g. by setting its folders to the same value: `ros2 param set /<server> behavior_trees "[<package>/<folder>]"`.
 
 ## How Files Are Read and Written
 
