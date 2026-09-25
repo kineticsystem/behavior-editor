@@ -14,6 +14,7 @@
 - [Validation](#validation)
 - [Your Own Node Types](#your-own-node-types)
 - [Project Layout](#project-layout)
+- [Monitoring a Run from Another Server](#monitoring-a-run-from-another-server)
 
 ## Introduction
 
@@ -176,3 +177,16 @@ validator/    the BehaviorTree.CPP validator (C++)
 tests/        unit tests (vitest)
 docs/         the architecture document and the screenshot
 ```
+
+## Monitoring a Run from Another Server
+
+While a tree runs, the editor shows the status of each node only if the server reports it. StepIt Commander does. With another BehaviorTree.ROS2 server, the editor shows only how the run ends. To report the statuses, return a JSON message from `onLoopFeedback()` of your `TreeExecutionServer`:
+
+```json
+{"tree": "<root>...</root>", "nodes": {"3": "RUNNING", "4": "FAILURE"}}
+```
+
+- `tree`, in the first message only: `BT::WriteTreeToXML(tree, true, false)`, which gives every node its `_uid`.
+- `nodes`: the nodes whose status changed since the previous message, by `_uid`: `RUNNING`, `SUCCESS`, `FAILURE` or `SKIPPED`. Record them with a `BT::StatusChangeLogger`, keep the last status other than `IDLE`, and send them after the last tick too.
+
+`ExecutionStatus`, in `src/stepit_server` of [StepIt Commander](https://github.com/kineticsystem/stepit-commander), does exactly this and can be copied.

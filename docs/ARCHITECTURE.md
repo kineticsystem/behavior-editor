@@ -365,14 +365,15 @@ The screen is laid out in [`App.tsx`](../src/client/App.tsx), which also handles
 | [`Problems`](../src/client/components/Problems.tsx) | Center | The issues of both validation layers; click one to select the node. |
 | [`Inspector`](../src/client/components/Inspector.tsx) | Right | The details of the selection: a node's ports and scripts, a tree's ID and interface, or a node type and where it is used. |
 | [`AddNodeDialog`](../src/client/components/AddNodeDialog.tsx) | Dialog | The palette to add a node or a SubTree, wrap the selection, or declare a new node type. |
-| [`RunDialog`](../src/client/components/RunDialog.tsx) | Dialog | The payload of a tree, and its run on the robot. |
+| [`RunDialog`](../src/client/components/RunDialog.tsx) | Dialog | The payload of a tree, before running it on the robot. |
+| [`ExecutionPanel`](../src/client/components/ExecutionPanel.tsx) | Center | A running tree, in place of the tree editor: the status of each node, and what failed. |
 | [`Ports`](../src/client/components/Ports.tsx) | Shared | The ports of a node type, as shown by the details panel and by a file of node models. |
 
 Dialogs are opened from anywhere with the promise-based helpers of [`dialogs.tsx`](../src/client/dialogs.tsx), e.g. `await confirm(...)` or `await choose(...)`, and rendered by a single `DialogHost`.
 
 ### Running a Tree
 
-The Run dialog saves the files, then [`src/client/ros.ts`](../src/client/ros.ts) opens a WebSocket to rosbridge and sends an `ExecuteTree` action goal to the BehaviorTree.ROS2 server with the tree ID and a YAML payload. It shows the feedback messages while the tree runs, and the result at the end. The editor needs no ROS installation: rosbridge speaks JSON.
+The Run dialog saves the files, then [`src/client/ros.ts`](../src/client/ros.ts) opens a WebSocket to rosbridge and sends an `ExecuteTree` action goal to the BehaviorTree.ROS2 server with the tree ID and a YAML payload. The center panel then shows the execution ([`ExecutionPanel`](../src/client/components/ExecutionPanel.tsx)): the tree as the server runs it, with the status of each node that StepIt Commander reports in the feedback of the action ([`execution.ts`](../src/client/execution.ts)), and the result at the end. The editor needs no ROS installation: rosbridge speaks JSON.
 
 ## The Command Line Validator
 

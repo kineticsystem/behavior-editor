@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { redo, save, saveAll, undo } from './actions';
 import { Browser } from './components/Browser';
+import { ExecutionPanel } from './components/ExecutionPanel';
 import { Inspector } from './components/Inspector';
 import { Splitter, useStoredSize } from './components/Splitter';
 import { TreeEditor } from './components/TreeEditor';
@@ -23,6 +24,7 @@ const SIDE_MIN = 160;
 export function App() {
   const loading = useStore((s) => s.loading);
   const loadError = useStore((s) => s.loadError);
+  const executionShown = useStore((s) => s.executionShown);
   const analysis = useAnalysis();
   const [left, setLeft] = useStoredSize('be.left', 270);
   const [right, setRight] = useStoredSize('be.right', 360);
@@ -89,7 +91,7 @@ export function App() {
       <Splitter direction="columns" label="Resize the workspace panel" value={left} onChange={setLeft} grow={1} min={SIDE_MIN} max={640} />
       {loading && !Object.keys(useStore.getState().files).length
         ? <main className="panel placeholder">Loading…</main>
-        : <TreeEditor analysis={analysis} />}
+        : executionShown ? <ExecutionPanel analysis={analysis} /> : <TreeEditor analysis={analysis} />}
       <Splitter direction="columns" label="Resize the details panel" value={right} onChange={setRight} grow={-1} min={SIDE_MIN} max={720} />
       <Inspector analysis={analysis} />
       <DialogHost />

@@ -348,6 +348,22 @@ button.root-path:hover > svg:last-child { opacity: 1; }
 
 .empty-tree { padding: 24px 32px; color: var(--muted); }
 
+/* The execution view: the rows of the tree editor, with the status of each node. */
+.exec-state { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px; flex: none; }
+.exec-state.exec-running, .run-button.running { color: var(--accent); }
+.exec-state.exec-success { color: var(--ok); }
+.exec-state.exec-failure { color: var(--error); }
+.exec-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: exec-pulse 1s ease-in-out infinite; }
+@keyframes exec-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .exec-dot { animation: none; } }
+.exec-status { display: inline-flex; gap: 4px; font-size: 12px; color: var(--muted); flex: none; }
+.exec-status.exec-running { color: var(--accent); font-weight: 600; }
+.exec-status.exec-success { color: var(--ok); }
+.exec-status.exec-failure { color: var(--error); font-weight: 600; }
+.row.exec-row-running { background-color: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.row.exec-row-failure { background-color: var(--error-soft); box-shadow: inset 3px 0 0 var(--error); }
+.execution-log { max-height: 30%; }
+
 .model-list { flex: 1; overflow: auto; padding: 12px 20px 24px; }
 .model-list section { margin-bottom: 18px; }
 .model-list h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: 14px; }

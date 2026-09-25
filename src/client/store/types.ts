@@ -4,12 +4,15 @@
 //   navigation  what is selected, and the Back and Forward history
 //   ui          view state that is not part of any file: collapsed rows,
 //               the clipboard, toasts
+//   execution   the tree running on the server, as it reports it
 //
 // A slice may call the actions of the others through get().
 
 import type { StateCreator } from 'zustand';
 import type { NativeResult } from '../../server/native';
 import type { BTDocument, BTNode, NodeModel, ParseError } from '../../shared/types';
+import type { ExecutedTree, ExecutionStatus } from '../execution';
+import type { RunResult } from '../ros';
 
 export interface FileState {
   path: string;
@@ -151,6 +154,36 @@ export interface UiSlice {
   resetUi(): void;
 }
 
-export type State = DocumentsSlice & NavigationSlice & UiSlice;
+/** A tree run on the server, from the Run dialog. */
+export interface Execution {
+  /** The ID of the tree run. */
+  treeId: string;
+  /** Running, or how it ended. */
+  result?: RunResult;
+  /** The tree as the server executes it; undefined until it says, or if it never does. */
+  tree?: ExecutedTree;
+  /** The last status of each node, by _uid. */
+  statuses: Record<string, ExecutionStatus>;
+  /** Feedback that is not a status, as plain text. */
+  messages: string[];
+  /** The _uid of a node that threw, from the error message of the server. */
+  crashed?: string;
+  startedAt: number;
+  endedAt?: number;
+}
+
+export interface ExecutionSlice {
+  execution?: Execution;
+  /** Whether the execution is shown in place of the tree editor. */
+  executionShown: boolean;
+
+  startExecution(treeId: string): void;
+  /** Apply a feedback message of the server: statuses, or plain text. */
+  applyFeedback(message: string): void;
+  endExecution(result: RunResult): void;
+  showExecution(shown: boolean): void;
+}
+
+export type State = DocumentsSlice & NavigationSlice & UiSlice & ExecutionSlice;
 
 export type Slice<T> = StateCreator<State, [], [], T>;
