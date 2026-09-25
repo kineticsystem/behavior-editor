@@ -100,7 +100,7 @@ Without Docker, set the folder and the port with `BEHAVIORS_DIR` and `PORT`:
 BEHAVIORS_DIR=~/my_robot/behaviors PORT=8080 ./bin/serve.sh
 ```
 
-We can open another folder from the editor too, by clicking the folder path at the top left. In Docker, the editor only sees the folder mounted when the container was started, at `~/behaviors`: to edit a folder outside it, start the container again with that folder, e.g. `./docker/dock.sh editor serve ~/other_robot/behaviors`.
+We can open another folder from the editor too, by clicking the folder path at the top left, among the folders of our home folder, or of `BEHAVIORS_BASE` when it is set. In Docker, the editor only sees the folder mounted when the container was started, at `~/behaviors`: to edit a folder outside it, start the container again with that folder, e.g. `./docker/dock.sh editor serve ~/other_robot/behaviors`.
 
 > [!IMPORTANT]
 > The server listens on all network interfaces, so anyone on the network can open it. On the host, add `HOST=127.0.0.1` to keep it to your machine.
@@ -131,6 +131,8 @@ All the XML files in the folder, sub-folders included, form one workspace, the w
 
 Saving rewrites the whole file with two-space indentation and one element per line. Comments are kept, and so are elements the editor does not know, such as `<include>`. Only BTCPP format 4 is supported.
 
+A file may change on disk while it is open, e.g. edited by hand, pulled from Git or saved from another tab. The editor never overwrites such a change unseen: saving asks whether to overwrite it or to reload the file and drop our edits. Reloading the folder keeps our unsaved edits, and tells which of their files changed on disk.
+
 ## Validation
 
 Two layers, both run on unsaved edits too:
@@ -158,6 +160,8 @@ Save the output in the folder, e.g. `models/my_nodes.xml`, and add a test that f
 
 ## Project Layout
 
+To learn how the editor is built, start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ```
 bin/          update, build, serve, dev, test and validate scripts
 docker/       the container
@@ -168,4 +172,5 @@ src/client/   the React editor
 src/cli/      the command line validator, run by bin/validate.sh
 validator/    the BehaviorTree.CPP validator (C++)
 tests/        unit tests (vitest)
+docs/         the architecture document and the screenshot
 ```
