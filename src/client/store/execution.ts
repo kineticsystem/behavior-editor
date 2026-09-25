@@ -31,7 +31,12 @@ export const executionSlice: Slice<ExecutionSlice> = (set, get) => ({
     const execution = get().execution;
     if (!execution) return;
     const crashed = result.ok ? undefined : failedNodeUid(result.message);
-    set({ execution: { ...execution, result, crashed, endedAt: Date.now() } });
+    // Nothing runs once the run is over. A node still marked running was halted
+    // with the tree, when it was stopped or a node threw: the server then sends
+    // no last feedback.
+    const statuses = Object.fromEntries(Object.entries(execution.statuses)
+      .map(([uid, status]) => [uid, status === 'RUNNING' ? 'HALTED' : status] as const));
+    set({ execution: { ...execution, statuses, result, crashed, endedAt: Date.now() } });
     if (!get().executionShown) {
       get().toast(`${execution.treeId}: ${result.ok ? 'succeeded' : result.outcome === 'canceled' ? 'stopped' : 'failed'}`,
         result.ok ? 'info' : 'error');

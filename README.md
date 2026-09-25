@@ -188,7 +188,7 @@ While a tree runs, the editor shows the status of each node only if the server r
 ```
 
 - `tree`, in the first message only: `BT::WriteTreeToXML(tree, true, false)`, which gives every node its `_uid`.
-- `nodes`: the nodes whose status changed since the previous message, by `_uid`: `RUNNING`, `SUCCESS`, `FAILURE` or `SKIPPED`. Record them with a `BT::StatusChangeLogger`, keep the last status other than `IDLE`, and send them after the last tick too.
+- `nodes`: the nodes whose status changed since the previous message, by `_uid`: `RUNNING`, `SUCCESS`, `FAILURE`, `SKIPPED`, or `HALTED` for a node that went from `RUNNING` straight back to `IDLE`. Record them with a `BT::StatusChangeLogger`, ignore any other return to `IDLE`, and send them after the last tick too.
 
 `ExecutionStatus`, in `src/stepit_server` of [StepIt Commander](https://github.com/kineticsystem/stepit-commander), does exactly this and can be copied.
 

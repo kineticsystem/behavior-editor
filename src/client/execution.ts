@@ -6,16 +6,17 @@
 // `tree`, in the first message only, is the tree being executed as written by
 // BT::WriteTreeToXML: every subtree expanded into a <BehaviorTree> of its own,
 // told apart by its _fullpath, and every node carrying its _uid. `nodes` are the
-// nodes whose status changed since, by _uid, each with its last status.
+// nodes whose status changed since, by _uid, each with its last status, or
+// HALTED for a node stopped while running, e.g. by a reactive parent.
 
 import { isDisabled } from '../shared/treeOps';
 import type { BehaviorTreeDef, BTNode } from '../shared/types';
 import { parseDocument, trees } from '../shared/xml';
 import type { RunResult } from './ros';
 
-export type ExecutionStatus = 'RUNNING' | 'SUCCESS' | 'FAILURE' | 'SKIPPED';
+export type ExecutionStatus = 'RUNNING' | 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'HALTED';
 
-const STATUSES = new Set<string>(['RUNNING', 'SUCCESS', 'FAILURE', 'SKIPPED']);
+const STATUSES = new Set<string>(['RUNNING', 'SUCCESS', 'FAILURE', 'SKIPPED', 'HALTED']);
 
 export interface ExecutionFeedback {
   tree?: string;
