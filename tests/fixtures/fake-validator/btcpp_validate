@@ -1,0 +1,17 @@
+#!/usr/bin/env node
+// A stand-in for validator/main.cpp, for tests: prints the built-in nodes, or
+// one error per file of the manifest, plus a line that is not a finding.
+import fs from 'node:fs';
+if (process.argv[2] === '--builtins') {
+  console.log(JSON.stringify([
+    { id: 'Sequence', category: 'Control', ports: [] },
+    { id: 'Repeat', category: 'Decorator', ports: [{ direction: 'input', name: 'num_cycles', type: 'int' }] },
+  ]));
+  process.exit(0);
+}
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+for (const file of manifest.files) {
+  console.log(JSON.stringify({ level: 'error', file, tree: 'T', message: `Cannot load ${file}; models: ${manifest.models.map((m) => m.id).join(',')}` }));
+}
+console.log('not json');
+process.exit(1);

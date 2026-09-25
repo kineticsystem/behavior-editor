@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
-import { behaviorsRoot, createApi } from './src/server/api';
+import { createApi } from './src/server/api';
+import { behaviorsRoot } from './src/server/files';
 
 /** Serves the API from the development server, as src/server/main.ts does in production. */
 function behaviorsApi(): Plugin {

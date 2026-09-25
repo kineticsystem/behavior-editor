@@ -4,7 +4,8 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { behaviorsRoot, createApi } from './api';
+import { createApi } from './api';
+import { behaviorsRoot } from './files';
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), '../../dist');
 const PORT = Number(process.env.PORT ?? 8080);

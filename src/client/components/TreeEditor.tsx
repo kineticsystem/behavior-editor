@@ -2,19 +2,20 @@
 // editing toolbar and the problems list.
 
 import { useState } from 'react';
+import { idError } from '../../shared/ids';
 import { findTreeByUid, flatten, isDisabled, locate } from '../../shared/treeOps';
-import { prettyType } from '../../shared/builtins';
 import type { NodeModel } from '../../shared/types';
-import { models as docModels, newTree as createTree, trees } from '../../shared/xml';
+import { models as docModels, trees } from '../../shared/xml';
 import {
-  copySelected, cutSelected, deleteSelected, duplicateSelected, paste, redo, save, shiftSelected,
-  toggleDisabledSelected, undo,
+  addNewTree, copySelected, cutSelected, deleteSelected, duplicateSelected, paste, redo, save, shiftSelected,
+  toggleDisabledSelected, treeIds, undo,
 } from '../actions';
-import { ID_PATTERN, prompt } from '../dialogs';
+import { prompt } from '../dialogs';
 import type { Analysis } from '../hooks';
 import { type HistoryEntry, isDirty, useStore } from '../store';
 import { openAddDialog } from './AddNodeDialog';
 import { CategoryBadge, Icon } from './icons';
+import { PortList } from './Ports';
 import { Problems } from './Problems';
 import { openRunDialog } from './RunDialog';
 import { Splitter, useStoredSize } from './Splitter';
@@ -64,40 +65,19 @@ function ModelList({ models, onAddTree }: { models: NodeModel[]; onAddTree: () =
         <section key={`${m.category}:${m.id}`}>
           <h3><CategoryBadge category={m.category} /> {m.id} <span className="muted small">{m.category}</span></h3>
           {m.description && <p className="muted">{m.description}</p>}
-          <table>
-            <tbody>
-              {m.ports.map((p) => (
-                <tr key={p.name}>
-                  <td className="mono">{p.direction === 'input' ? '→' : p.direction === 'output' ? '←' : '↔'} {p.name}</td>
-                  <td className="mono muted" title={p.type}>{p.type ? prettyType(p.type) : ''}</td>
-                  <td className="mono muted">{p.default !== undefined ? `= ${p.default === '' ? '""' : p.default}` : ''}</td>
-                  <td>{p.description}</td>
-                </tr>
-              ))}
-              {!m.ports.length && <tr><td className="muted">No ports</td></tr>}
-            </tbody>
-          </table>
+          <PortList ports={m.ports} />
         </section>
       ))}
     </div>
   );
 }
 
-async function newTree(path: string, existing: Set<string>) {
+async function newTree(path: string) {
+  const existing = treeIds();
   const values = await prompt(`New tree in ${path}`, [{
-    name: 'id', label: 'Tree ID', placeholder: 'MyBehavior',
-    validate: (v) => (!ID_PATTERN.test(v) ? 'Letters, digits, _ . - only; not starting with a digit'
-      : existing.has(v) ? 'A tree with this ID already exists' : undefined),
+    name: 'id', label: 'Tree ID', placeholder: 'MyBehavior', validate: (v) => idError(v, existing),
   }], 'Create');
-  if (!values) return;
-  const tree = createTree(values.id);
-  const s = useStore.getState();
-  s.edit(path, (doc) => {
-    // After the last tree, so that the TreeNodesModel stays at the end.
-    const last = doc.items.map((i) => i.kind).lastIndexOf('tree');
-    doc.items.splice(last + 1, 0, { kind: 'tree', tree });
-  });
-  s.select({ file: path, tree: tree.uid });
+  if (values) addNewTree(path, values.id);
 }
 
 export function TreeEditor({ analysis }: { analysis: Analysis }) {
@@ -138,7 +118,7 @@ export function TreeEditor({ analysis }: { analysis: Analysis }) {
             )}
             {file.doc && (
               <button className="icon-button" title="New tree in this file"
-                onClick={() => void newTree(file.path, new Set(ws.trees.keys()))}>
+                onClick={() => void newTree(file.path)}>
                 <Icon name="plus" size={14} />
               </button>
             )}
@@ -202,11 +182,11 @@ export function TreeEditor({ analysis }: { analysis: Analysis }) {
         ) : tree ? (
           <TreeView analysis={analysis} path={file.path} tree={tree} />
         ) : file.doc && docModels(file.doc).length ? (
-          <ModelList models={docModels(file.doc)} onAddTree={() => void newTree(file.path, new Set(ws.trees.keys()))} />
+          <ModelList models={docModels(file.doc)} onAddTree={() => void newTree(file.path)} />
         ) : (
           <div className="placeholder">
             This file has no behavior tree.{' '}
-            <button className="link" onClick={() => void newTree(file.path, new Set(ws.trees.keys()))}>Add one</button>
+            <button className="link" onClick={() => void newTree(file.path)}>Add one</button>
           </div>
         )}
       </div>

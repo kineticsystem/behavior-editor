@@ -4,10 +4,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { payloadKeys, payloadText } from '../../shared/payload';
 import type { Workspace } from '../../shared/workspace';
+import { saveAll } from '../actions';
 import { openDialog } from '../dialogs';
 import { defaultRosbridgeUrl, type Run, type RunResult, runTree } from '../ros';
 import { useSettings } from '../settings';
-import { isDirty, useStore } from '../store';
+import { useStore } from '../store';
 import { Icon } from './icons';
 
 type Phase = { kind: 'form' } | { kind: 'running' } | { kind: 'done'; result: RunResult };
@@ -28,9 +29,7 @@ function RunForm({ treeId, keys, close }: { treeId: string; keys: string[]; clos
   const start = async () => {
     settings.update({ payloads: { ...settings.payloads, [treeId]: values } });
     // The server runs the files on disk.
-    const store = useStore.getState();
-    if (Object.values(store.files).some(isDirty)) await store.saveAll();
-    if (Object.values(useStore.getState().files).some(isDirty)) {
+    if (!await saveAll()) {
       setPhase({ kind: 'done', result: { ok: false, outcome: 'failed', message: 'Some files could not be saved, so the tree was not run.' } });
       return;
     }

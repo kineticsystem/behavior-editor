@@ -5,6 +5,15 @@ export type NodeCategory = 'Action' | 'Condition' | 'Control' | 'Decorator' | 'S
 
 export const CATEGORIES: NodeCategory[] = ['Control', 'Decorator', 'Action', 'Condition', 'SubTree'];
 
+/** The categories of the node types that C++ code registers: all but SubTree. */
+export type NodeTypeCategory = Exclude<NodeCategory, 'SubTree'>;
+
+export const NODE_TYPE_CATEGORIES: NodeTypeCategory[] = ['Action', 'Condition', 'Control', 'Decorator'];
+
+export function isNodeTypeCategory(value: string): value is NodeTypeCategory {
+  return (NODE_TYPE_CATEGORIES as string[]).includes(value);
+}
+
 export type PortDirection = 'input' | 'output' | 'inout';
 
 export interface PortModel {
@@ -101,6 +110,8 @@ export interface Issue {
   tree?: string;
   /** The uid of the offending node, to select it in the editor. */
   nodeUid?: string;
+  /** The attribute of the node at fault, e.g. a port, to mark its field. */
+  attribute?: string;
   line?: number;
   /** Where the issue comes from: the built-in rules or BehaviorTree.CPP itself. */
   source?: 'editor' | 'btcpp';

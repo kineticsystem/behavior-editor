@@ -2,20 +2,23 @@
 // itself when no node is selected.
 
 import { useEffect, useState } from 'react';
-import { COMMON_ATTRIBUTES, prettyType, SCRIPT_ATTRIBUTES } from '../../shared/builtins';
+import { COMMON_ATTRIBUTES, SCRIPT_ATTRIBUTES } from '../../shared/builtins';
+import { ID_PATTERN, idError } from '../../shared/ids';
+import { findTreeByUid, flatten, locate, setAttr } from '../../shared/treeOps';
 import {
-  findTreeByUid, flatten, locate, modelsOf, removeModel, renameSubtreeRefs, setAttr,
-} from '../../shared/treeOps';
-import type { BehaviorTreeDef, BTDocument, BTNode, Issue, NodeCategory, NodeModel, PortDirection, PortModel } from '../../shared/types';
+  type BehaviorTreeDef, type BTDocument, type BTNode, type Issue, type NodeModel, NODE_TYPE_CATEGORIES,
+  type NodeTypeCategory, type PortDirection, type PortModel,
+} from '../../shared/types';
 import { categoryOf, modelOf, referencesTo, subtreeRefs, usagesOf } from '../../shared/workspace';
-import { models as docModels, trees as docTrees } from '../../shared/xml';
-import { declareModel } from '../actions';
-import { confirm, ID_PATTERN } from '../dialogs';
+import { models as docModels, trees as docTrees, isGenerated } from '../../shared/xml';
+import {
+  declareFromNode, declareInterface, deleteTree, editNode, editTree, removeInterface, renameTree, setMainTree,
+} from '../actions';
+import { confirm } from '../dialogs';
 import { type Analysis } from '../hooks';
 import { useStore } from '../store';
 import { CategoryBadge, Icon, SeverityIcon } from './icons';
-
-const DIRECTION_ARROWS: Record<PortDirection, string> = { input: '→', output: '←', inout: '↔' };
+import { DirectionArrow, PortList, PortType } from './Ports';
 
 function IssueList({ issues }: { issues: Issue[] }) {
   if (!issues.length) return null;
@@ -30,27 +33,9 @@ function IssueList({ issues }: { issues: Issue[] }) {
   );
 }
 
-/** Whether a file says it is generated, in a comment before <root>, and must not be edited by hand. */
-function isGenerated(path: string): boolean {
-  return !!useStore.getState().files[path]?.doc?.prolog?.some((c) => /\bgenerated\b/i.test(c));
-}
-
-/** Edits the node `uid` of tree `treeUid` in file `path`. */
-function editNode(path: string, treeUid: string, uid: string, change: (n: BTNode) => void, coalesceKey?: string) {
-  useStore.getState().edit(path, (doc) => {
-    const t = findTreeByUid(doc, treeUid);
-    const at = t && locate(t, uid);
-    if (!at) return false;
-    change(at.node);
-  }, coalesceKey);
-}
-
-function editTree(path: string, treeUid: string, change: (t: BehaviorTreeDef, doc: BTDocument) => void | false, coalesceKey?: string) {
-  useStore.getState().edit(path, (doc) => {
-    const t = findTreeByUid(doc, treeUid);
-    if (!t) return false;
-    return change(t, doc);
-  }, coalesceKey);
+/** Whether the file `path` says it is generated, and must not be edited by hand. */
+function useIsGenerated(path: string | undefined): boolean {
+  return useStore((s) => (path ? isGenerated(s.files[path]?.doc) : false));
 }
 
 function TextField(props: {
@@ -95,9 +80,9 @@ function PortField({ port, value, onChange, issues }: {
   return (
     <TextField
       label={<>
-        <span className={`dir dir-${port.direction}`} title={`${port.direction} port`}>{DIRECTION_ARROWS[port.direction]}</span>
+        <DirectionArrow direction={port.direction} />
         <span className="port-name">{port.name}</span>
-        {port.type && <span className="port-type" title={port.type}>{prettyType(port.type)}</span>}
+        <PortType type={port.type} />
       </>}
       value={value}
       mono
@@ -109,9 +94,9 @@ function PortField({ port, value, onChange, issues }: {
   );
 }
 
-/** The issues of a node that mention a given attribute. */
+/** The issues of a node about a given attribute. */
 function issuesFor(issues: Issue[], name: string) {
-  return issues.filter((i) => i.message.includes(`"${name}"`) || i.message.includes(` ${name} `));
+  return issues.filter((i) => i.attribute === name);
 }
 
 function OtherAttributes({ node, known, onChange, issues }: {
@@ -221,7 +206,13 @@ function NodeInspector({ analysis, path, tree, node, readOnly = false }: {
   const known = new Set(['name', 'ID', ...ports.map((p) => p.name), ...Object.keys(COMMON_ATTRIBUTES), '_autoremap']);
   const scriptsSet = SCRIPT_ATTRIBUTES.some((k) => k in node.attrs);
   const treeIds = [...ws.trees.keys()].filter(Boolean).sort();
-  const [declareAs, setDeclareAs] = useState<Exclude<NodeCategory, 'SubTree'>>('Action');
+  const [declareAs, setDeclareAs] = useState<NodeTypeCategory>('Action');
+  const generated = useIsGenerated(model?.file);
+  // The attributes shown as fields, with their issues next to them; the other issues are listed at the top.
+  const fields = new Set([
+    'name', '_description', ...ports.map((p) => p.name), ...SCRIPT_ATTRIBUTES,
+    ...Object.keys(node.attrs).filter((k) => !known.has(k)),
+  ]);
 
   return (
     <div className="inspector-body">
@@ -248,7 +239,7 @@ function NodeInspector({ analysis, path, tree, node, readOnly = false }: {
       </div>
       {!isSubTree && model?.description && <p className="description">{model.description}</p>}
       {isSubTree && target?.tree.attrs._description && <p className="description">{target.tree.attrs._description}</p>}
-      <IssueList issues={issues.filter((i) => !ports.some((p) => issuesFor([i], p.name).length))} />
+      <IssueList issues={issues.filter((i) => !i.attribute || !fields.has(i.attribute))} />
 
       <Section title="Node">
         <TextField label="Instance name" value={node.attrs.name} placeholder={isSubTree ? node.attrs.ID : node.id}
@@ -308,7 +299,7 @@ function NodeInspector({ analysis, path, tree, node, readOnly = false }: {
 
       {!isSubTree && !model?.builtin && (
         <Section title="Node type">
-          {model?.file && isGenerated(model.file) ? (
+          {model?.file && generated ? (
             <p className="muted small">
               Declared in {model.file}, which is generated from the C++ nodes: change the C++ code and regenerate the
               file rather than editing it here.
@@ -328,19 +319,11 @@ function NodeInspector({ analysis, path, tree, node, readOnly = false }: {
                 Declare it so the editor knows its ports.
               </p>
               <div className="field-input">
-                <select value={declareAs} onChange={(e) => setDeclareAs(e.target.value as typeof declareAs)}>
-                  {(['Action', 'Condition', 'Control', 'Decorator'] as const).map((c) => <option key={c}>{c}</option>)}
+                <select value={declareAs} onChange={(e) => setDeclareAs(e.target.value as NodeTypeCategory)}>
+                  {NODE_TYPE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                 </select>
-                <button className="primary" onClick={() => {
-                  declareModel(path, node.id, declareAs);
-                  // Existing attributes become input ports of the new model.
-                  useStore.getState().edit(path, (doc) => {
-                    const m = modelsOf(doc).find((x) => x.id === node.id)!;
-                    for (const k of Object.keys(node.attrs)) {
-                      if (k !== 'name' && !k.startsWith('_')) m.ports.push({ direction: 'input', name: k });
-                    }
-                  });
-                }}>Declare in {path}</button>
+                {/* Its attributes become the input ports of the new model. */}
+                <button className="primary" onClick={() => declareFromNode(path, node, declareAs)}>Declare in {path}</button>
               </div>
             </>
           )}
@@ -351,16 +334,14 @@ function NodeInspector({ analysis, path, tree, node, readOnly = false }: {
   );
 }
 
-const DIRECTIONS: Record<PortDirection, string> = { input: 'input', output: 'output', inout: 'input/output' };
-
 /** A node type from the Behaviors list: its declaration, and where it is used. */
 function BehaviorInspector({ analysis, id }: { analysis: Analysis; id: string }) {
   const { ws } = analysis;
   const model = modelOf(ws, id);
+  const generated = useIsGenerated(model?.file);
   if (!model) return <div className="placeholder">The behavior {id} is no longer declared.</div>;
   const usages = usagesOf(ws, id);
   const total = usages.reduce((n, u) => n + u.nodes.length, 0);
-  const generated = model.file ? isGenerated(model.file) : false;
   // Built-in nodes and generated models are shown, not edited.
   const readOnly = model.builtin || generated;
 
@@ -383,21 +364,7 @@ function BehaviorInspector({ analysis, id }: { analysis: Analysis; id: string })
       <Section title={`Ports (${model.ports.length})`}>
         {readOnly ? (
           <>
-            {model.ports.length ? (
-              <dl className="port-list">
-                {model.ports.map((p) => (
-                  <div key={p.name}>
-                    <dt>
-                      <span className={`dir dir-${p.direction}`} title={`${DIRECTIONS[p.direction]} port`}>{DIRECTION_ARROWS[p.direction]}</span>
-                      <span className="port-name">{p.name}</span>
-                      {p.type && <span className="port-type" title={p.type}>{prettyType(p.type)}</span>}
-                      {p.default !== undefined && <span className="port-type">= {p.default === '' ? '""' : p.default}</span>}
-                    </dt>
-                    {p.description && <dd>{p.description}</dd>}
-                  </div>
-                ))}
-              </dl>
-            ) : <p className="muted small">No ports.</p>}
+            <PortList ports={model.ports} />
             {generated && (
               <p className="muted small">
                 Generated from the C++ nodes: change the C++ code and regenerate {model.file} rather than editing it here.
@@ -437,30 +404,12 @@ function TreeInspector({ analysis, path, tree, doc }: { analysis: Analysis; path
   const uses = [...new Set(subtreeRefs(tree.children).map((n) => n.attrs.ID).filter(Boolean))];
   const usedBy = referencesTo(ws, tree.id);
   const subtreeModel = ws.subtreeModels.get(tree.id);
-  const idError = !ID_PATTERN.test(id) ? 'Letters, digits, _ . - only; not starting with a digit'
-    : id !== tree.id && ws.trees.has(id) ? 'A tree with this ID already exists' : undefined;
+  const error = id === tree.id ? undefined : idError(id, ws.trees.keys());
 
   const rename = () => {
-    if (id === tree.id || idError) return;
-    const from = tree.id;
-    const s = useStore.getState();
-    // Update the tree, its SubTree model and every reference to it, in every file.
-    for (const f of Object.values(s.files)) {
-      if (!f.doc) continue;
-      const touches = f.path === path || docTrees(f.doc).some((t) => subtreeRefs(t.children).some((n) => n.attrs.ID === from))
-        || docModels(f.doc).some((m) => m.category === 'SubTree' && m.id === from);
-      if (!touches) continue;
-      s.edit(f.path, (d) => {
-        if (f.path === path) {
-          const t = findTreeByUid(d, tree.uid);
-          if (t) t.id = id;
-        }
-        renameSubtreeRefs(d, from, id);
-        for (const m of docModels(d)) if (m.category === 'SubTree' && m.id === from) m.id = id;
-      });
-    }
-    const others = usedBy.filter((r) => r.file !== path).length;
-    if (others) s.toast(`Renamed ${from} to ${id}, and updated ${others} referencing ${others === 1 ? 'tree' : 'trees'}`);
+    if (id === tree.id || error) return;
+    const others = renameTree(path, tree.uid, tree.id, id);
+    if (others) useStore.getState().toast(`Renamed ${tree.id} to ${id}, and updated ${others} other ${others === 1 ? 'file' : 'files'}`);
   };
 
   const goTo = (treeId: string) => {
@@ -485,13 +434,11 @@ function TreeInspector({ analysis, path, tree, doc }: { analysis: Analysis; path
           <div className="field-input">
             <input className="mono" value={id} onChange={(e) => setId(e.target.value)} onBlur={rename} spellCheck={false} />
           </div>
-          {idError ? <small className="field-error">{idError}</small>
+          {error ? <small className="field-error">{error}</small>
             : id !== tree.id ? <small>Press Enter to rename; SubTree references are updated too</small> : null}
         </form>
         <label className="checkbox">
-          <input type="checkbox" checked={isMain} onChange={(e) => useStore.getState().edit(path, (d) => {
-            setAttr({ attrs: d.rootAttrs }, 'main_tree_to_execute', e.target.checked ? tree.id : undefined);
-          })} />
+          <input type="checkbox" checked={isMain} onChange={(e) => setMainTree(path, tree.id, e.target.checked)} />
           <span>Main tree of {path} (<code>main_tree_to_execute</code>)</span>
         </label>
         <TextField label="Description" value={tree.attrs._description} multiline
@@ -505,7 +452,7 @@ function TreeInspector({ analysis, path, tree, doc }: { analysis: Analysis; path
             <ModelEditor file={subtreeModel.file} model={subtreeModel} />
             <button className="link danger" onClick={async () => {
               if (await confirm('Remove the interface', `Remove the port declarations of ${tree.id}?`, 'Remove')) {
-                useStore.getState().edit(subtreeModel.file!, (d) => removeModel(d, tree.id, 'SubTree'));
+                removeInterface(subtreeModel.file!, tree.id);
               }
             }}>Remove the declaration</button>
           </>
@@ -514,9 +461,7 @@ function TreeInspector({ analysis, path, tree, doc }: { analysis: Analysis; path
             <p className="muted small">
               Declaring the ports lets the editor list them on SubTree nodes, and check their remappings.
             </p>
-            <button onClick={() => useStore.getState().edit(path, (d) => {
-              modelsOf(d).push({ id: tree.id, category: 'SubTree', ports: [] });
-            })}><Icon name="plus" size={14} /> Declare ports</button>
+            <button onClick={() => declareInterface(path, tree.id)}><Icon name="plus" size={14} /> Declare ports</button>
           </>
         )}
       </Section>
@@ -538,13 +483,7 @@ function TreeInspector({ analysis, path, tree, doc }: { analysis: Analysis; path
       <Section title="File" open={false}>
         <p className="muted small">{path} has {docTrees(doc).length} {docTrees(doc).length === 1 ? 'tree' : 'trees'}.</p>
         <button className="danger" onClick={async () => {
-          if (!await confirm('Delete tree', <>Delete the tree <b>{tree.id}</b> from {path}?</>)) return;
-          const s = useStore.getState();
-          s.edit(path, (d) => {
-            d.items = d.items.filter((i) => !(i.kind === 'tree' && i.tree.uid === tree.uid));
-            if (d.rootAttrs.main_tree_to_execute === tree.id) delete d.rootAttrs.main_tree_to_execute;
-          });
-          s.selectFile(path);
+          if (await confirm('Delete tree', <>Delete the tree <b>{tree.id}</b> from {path}?</>)) deleteTree(path, tree.uid);
         }}><Icon name="trash" size={14} /> Delete this tree</button>
       </Section>
     </div>

@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
-import { redo, save, undo } from './actions';
+import { redo, save, saveAll, undo } from './actions';
 import { Browser } from './components/Browser';
 import { Inspector } from './components/Inspector';
 import { Splitter, useStoredSize } from './components/Splitter';
 import { TreeEditor } from './components/TreeEditor';
 import { DialogHost, useDialog } from './dialogs';
 import { useAnalysis } from './hooks';
-import { isDirty, useStore } from './store';
+import { hasDirtyFiles, useStore } from './store';
 
 function Toasts() {
   const toasts = useStore((s) => s.toasts);
@@ -47,7 +47,7 @@ export function App() {
       const key = e.key.toLowerCase();
       if (key === 's') {
         e.preventDefault();
-        if (e.shiftKey) void useStore.getState().saveAll();
+        if (e.shiftKey) void saveAll();
         else save();
       } else if (!inField && key === 'z') {
         e.preventDefault();
@@ -59,7 +59,7 @@ export function App() {
       }
     };
     const onUnload = (e: BeforeUnloadEvent) => {
-      if (Object.values(useStore.getState().files).some(isDirty)) e.preventDefault();
+      if (hasDirtyFiles(useStore.getState().files)) e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('beforeunload', onUnload);
@@ -85,7 +85,7 @@ export function App() {
     <div className="app" style={{
       gridTemplateColumns: `minmax(${SIDE_MIN}px, ${left}px) 4px minmax(320px, 1fr) 4px minmax(${SIDE_MIN}px, ${right}px)`,
     }}>
-      <Browser />
+      <Browser analysis={analysis} />
       <Splitter direction="columns" label="Resize the workspace panel" value={left} onChange={setLeft} grow={1} min={SIDE_MIN} max={640} />
       {loading && !Object.keys(useStore.getState().files).length
         ? <main className="panel placeholder">Loading…</main>

@@ -1,8 +1,10 @@
-// Edits of a tree in place. The editor applies them to a copy of the
-// document, so that the previous version stays available for undo.
+// Edits of a tree, or of a whole document, in place. The editor applies them
+// to a copy of the document, so that the previous version stays available for
+// undo. The functions that may find nothing to do return false then, which
+// tells the editor not to record an undo step.
 
-import type { BehaviorTreeDef, BTDocument, BTNode, NodeModel } from './types';
-import { newUid, trees } from './xml';
+import type { BehaviorTreeDef, BTDocument, BTNode, NodeModel, NodeTypeCategory, PortModel } from './types';
+import { models, newUid, trees } from './xml';
 
 /** A node, or a tree whose children are its root nodes. */
 export type Container = BTNode | BehaviorTreeDef;
@@ -68,6 +70,15 @@ export function move(tree: BehaviorTreeDef, uid: string, targetUid: string, plac
   if (!at || uid === targetUid || contains(at.node, targetUid)) return false;
   remove(tree, uid);
   return insert(tree, at.node, targetUid, placement);
+}
+
+/** Replaces the node `uid` with `parent`, which gets the node as its only child. */
+export function wrap(tree: BehaviorTreeDef, uid: string, parent: BTNode): boolean {
+  const at = locate(tree, uid);
+  if (!at) return false;
+  parent.children = [at.node];
+  at.parent.children[at.index] = parent;
+  return true;
 }
 
 /** Moves a node one step up or down among its siblings. */
@@ -155,4 +166,54 @@ export function removeModel(doc: BTDocument, id: string, category?: string) {
     item.models = item.models.filter((m) => !(m.id === id && (!category || m.category === category)));
   }
   doc.items = doc.items.filter((i) => i.kind !== 'models' || i.models.length > 0);
+}
+
+/** Adds a tree after the last one, so that a TreeNodesModel at the end stays there. */
+export function addTree(doc: BTDocument, tree: BehaviorTreeDef) {
+  const last = doc.items.map((i) => i.kind).lastIndexOf('tree');
+  doc.items.splice(last + 1, 0, { kind: 'tree', tree });
+}
+
+/** Removes a tree, and main_tree_to_execute if it named it. */
+export function deleteTree(doc: BTDocument, treeUid: string): boolean {
+  const tree = findTreeByUid(doc, treeUid);
+  if (!tree) return false;
+  doc.items = doc.items.filter((i) => !(i.kind === 'tree' && i.tree.uid === treeUid));
+  if (doc.rootAttrs.main_tree_to_execute === tree.id) delete doc.rootAttrs.main_tree_to_execute;
+  return true;
+}
+
+/**
+ * Renames the tree `from` to `to` as far as this document is concerned: the
+ * tree itself if it is here (`treeUid`), the SubTree nodes and the
+ * main_tree_to_execute that refer to it, and its SubTree model. Applied to
+ * every file, it renames the tree in the whole workspace.
+ */
+export function renameTree(doc: BTDocument, from: string, to: string, treeUid?: string): boolean {
+  let changed = false;
+  const tree = treeUid ? findTreeByUid(doc, treeUid) : undefined;
+  if (tree) {
+    tree.id = to;
+    changed = true;
+  }
+  if (renameSubtreeRefs(doc, from, to)) changed = true;
+  for (const m of models(doc)) {
+    if (m.category === 'SubTree' && m.id === from) {
+      m.id = to;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** Declares a node type in the document's TreeNodesModel. */
+export function declareModel(doc: BTDocument, id: string, category: NodeTypeCategory, ports: PortModel[] = []) {
+  modelsOf(doc).push({ id, category, ports });
+}
+
+/** Input ports for the attributes of an undeclared node, to declare its type from it. */
+export function portsFromAttributes(node: BTNode): PortModel[] {
+  return Object.keys(node.attrs)
+    .filter((k) => k !== 'name' && !k.startsWith('_'))
+    .map((name) => ({ direction: 'input', name }));
 }

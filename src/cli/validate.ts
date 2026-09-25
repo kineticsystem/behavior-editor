@@ -6,7 +6,7 @@
 // when it is built. Exits with 1 when any error is found.
 
 import { resolve } from 'node:path';
-import { behaviorsRoot, listXmlFiles, readBehaviorFiles } from '../server/api';
+import { behaviorsRoot, listXmlFiles, readBehaviorFiles } from '../server/files';
 import { nativeBuiltins, validateNative } from '../server/native';
 import type { Issue } from '../shared/types';
 import { validateFiles } from '../shared/validate';
