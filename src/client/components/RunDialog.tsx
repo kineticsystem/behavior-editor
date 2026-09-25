@@ -51,10 +51,6 @@ function RunForm({ treeId, keys, close }: { treeId: string; keys: string[]; clos
     <form className="run-dialog" onSubmit={(e) => { e.preventDefault(); if (!running) void start(); }}
       onKeyDown={(e) => e.key === 'Escape' && close()}>
       <h2><Icon name="play" size={15} /> Run {treeId}</h2>
-      <p className="muted small">
-        Unsaved changes are saved first. The server may still run the trees it loaded when it
-        started: make it reload them to run what you saved.
-      </p>
 
       <fieldset className="bare run-payload" disabled={running}>
         {keys.length ? keys.map((key, i) => (

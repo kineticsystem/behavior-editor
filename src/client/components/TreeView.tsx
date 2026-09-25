@@ -4,15 +4,17 @@
 // dimmed; double-click one to open that tree. Behaviors can be dragged in from
 // the Behaviors list to add a node. Rows can be dragged to move a
 // node: to the top or bottom edge of a row to place it before or after, to the
-// middle to make it the last child.
+// middle to make it the last child. A disabled node (_skipIf="true") never
+// runs, so it is greyed out together with everything below it.
 
 import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { canHaveChildren } from '../../shared/builtins';
-import { locate, type Placement } from '../../shared/treeOps';
+import { isDisabled, locate, type Placement } from '../../shared/treeOps';
 import type { BehaviorTreeDef, BTNode, Issue } from '../../shared/types';
 import { categoryOf, findTree, modelOf, type TreeRef, type Workspace } from '../../shared/workspace';
 import {
   addNode, copySelected, cutSelected, deleteSelected, duplicateSelected, moveNode, paste, shiftSelected,
+  toggleDisabledSelected,
 } from '../actions';
 import { type Analysis, countBySeverity } from '../hooks';
 import { getDraggedModel, setDraggedModel } from '../dnd';
@@ -28,6 +30,8 @@ interface Row {
   file: string;
   depth: number;
   readonly: boolean;
+  /** The node, or one of its ancestors, is disabled. */
+  skipped: boolean;
   expandable: boolean;
   open: boolean;
   parentKey?: string;
@@ -40,28 +44,29 @@ function buildRows(ws: Workspace, file: string, tree: BehaviorTreeDef,
   const rows: Row[] = [];
   const treeOpen = !collapsed[tree.uid];
   rows.push({
-    key: tree.uid, kind: 'tree', tree, file, depth: 0, readonly: false,
+    key: tree.uid, kind: 'tree', tree, file, depth: 0, readonly: false, skipped: false,
     expandable: tree.children.length > 0, open: treeOpen,
   });
   const walk = (nodes: BTNode[], depth: number, owner: TreeRef, readonly: boolean, prefix: string,
-    parentKey: string, ancestry: string[]) => {
+    parentKey: string, ancestry: string[], parentSkipped: boolean) => {
     for (const n of nodes) {
       const key = readonly ? `${prefix}/${n.uid}` : n.uid;
+      const skipped = parentSkipped || isDisabled(n);
       if (n.id === 'SubTree') {
         const target = findTree(ws, n.attrs.ID ?? '');
         const expandable = !!target && !ancestry.includes(target.tree.id) && target.tree.children.length > 0;
         const open = expandable && !!openSubtrees[key];
-        rows.push({ key, kind: 'node', node: n, tree: owner.tree, file: owner.file, depth, readonly, expandable, open, parentKey, target });
-        if (open && target) walk(target.tree.children, depth + 1, target, true, key, key, [...ancestry, target.tree.id]);
+        rows.push({ key, kind: 'node', node: n, tree: owner.tree, file: owner.file, depth, readonly, skipped, expandable, open, parentKey, target });
+        if (open && target) walk(target.tree.children, depth + 1, target, true, key, key, [...ancestry, target.tree.id], skipped);
       } else {
         const expandable = n.children.length > 0;
         const open = expandable && !collapsed[key];
-        rows.push({ key, kind: 'node', node: n, tree: owner.tree, file: owner.file, depth, readonly, expandable, open, parentKey });
-        if (open) walk(n.children, depth + 1, owner, readonly, prefix, key, ancestry);
+        rows.push({ key, kind: 'node', node: n, tree: owner.tree, file: owner.file, depth, readonly, skipped, expandable, open, parentKey });
+        if (open) walk(n.children, depth + 1, owner, readonly, prefix, key, ancestry, skipped);
       }
     }
   };
-  if (treeOpen) walk(tree.children, 1, { file, tree }, false, '', tree.uid, [tree.id]);
+  if (treeOpen) walk(tree.children, 1, { file, tree }, false, '', tree.uid, [tree.id], false);
   return rows;
 }
 
@@ -157,6 +162,7 @@ export function TreeView({ analysis, path, tree }: { analysis: Analysis; path: s
     else if (e.key === 'Enter' && row?.target) navigate(row);
     else if (e.key === 'Enter' || e.key === 'Insert' || (e.key === 'a' && !mod)) openAddDialog(ws, 'node');
     else if (e.key === 's' && !mod) openAddDialog(ws, 'subtree');
+    else if (e.key === 'd' && !mod && row?.kind === 'node') toggleDisabledSelected();
     else if (mod && e.key === 'c') copySelected();
     else if (mod && e.key === 'x') cutSelected();
     else if (mod && e.key === 'v') paste(ws);
@@ -196,6 +202,7 @@ export function TreeView({ analysis, path, tree }: { analysis: Analysis; path: s
           'row',
           row.kind === 'tree' ? 'row-tree' : '',
           row.readonly ? 'readonly' : '',
+          row.skipped ? 'skipped' : '',
           row.key === selectedKey && !focusModel ? 'selected' : '',
           focusModel && node?.id === focusModel ? 'uses-model' : '',
           isDrop ? `drop-${drop.placement}` : '',
@@ -283,6 +290,12 @@ export function TreeView({ analysis, path, tree }: { analysis: Analysis; path: s
                   onClick={(e) => { e.stopPropagation(); select(row); openAddDialog(ws, 'node'); }}>
                   <Icon name="plus" size={14} />
                 </button>
+                {row.kind === 'node' && (
+                  <button className="icon-button" title={isDisabled(node!) ? 'Enable (D)' : 'Disable (D)'} tabIndex={-1}
+                    onClick={(e) => { e.stopPropagation(); select(row); toggleDisabledSelected(); }}>
+                    <Icon name="disable" size={14} />
+                  </button>
+                )}
                 {row.kind === 'node' && (
                   <button className="icon-button" title="Delete (Del)" tabIndex={-1}
                     onClick={(e) => { e.stopPropagation(); select(row); deleteSelected(); }}>

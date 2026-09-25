@@ -3,7 +3,8 @@
 
 import { canHaveChildren } from '../shared/builtins';
 import {
-  cloneNode, createNode, findTreeByUid, insert, locate, modelsOf, move, type Placement, remove, shift,
+  cloneNode, createNode, findTreeByUid, insert, isDisabled, locate, modelsOf, move, type Placement, remove,
+  setDisabled, shift,
 } from '../shared/treeOps';
 import type { BehaviorTreeDef, BTNode, NodeCategory, NodeModel } from '../shared/types';
 import { categoryOf, type Workspace } from '../shared/workspace';
@@ -131,6 +132,18 @@ export function duplicateSelected() {
   const node = selectedNode();
   const { node: uid } = current();
   if (node && uid) insertNode(cloneNode(node), { target: uid, placement: 'after' });
+}
+
+/** Disables the selected node through _skipIf, or enables it again. */
+export function toggleDisabledSelected() {
+  const { s, file, tree, node } = current();
+  if (!file || !tree || !node) return;
+  s.edit(file, (doc) => {
+    const t = findTreeByUid(doc, tree);
+    const at = t && locate(t, node);
+    if (!at) return false;
+    setDisabled(at.node, !isDisabled(at.node));
+  });
 }
 
 /** Wraps the selected node in a new parent, e.g. an Inverter or a Sequence. */

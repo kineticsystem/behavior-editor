@@ -44,8 +44,8 @@ RUN arch=$(dpkg --print-architecture | sed 's/amd64/x64/') \
   | tar -xJ -C /usr/local --strip-components=1 \
  && corepack enable
 
-# BehaviorTree.CPP, without the optional Groot publisher (ZeroMQ) and SQLite
-# logger, which the validator does not use.
+# BehaviorTree.CPP, without the optional ZeroMQ publisher and SQLite logger,
+# which the validator does not use.
 ARG BTCPP_VERSION=4.10.0
 RUN git clone --depth 1 --branch ${BTCPP_VERSION} https://github.com/BehaviorTree/BehaviorTree.CPP.git /tmp/btcpp \
  && cmake -S /tmp/btcpp -B /tmp/btcpp/build \

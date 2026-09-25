@@ -4,7 +4,7 @@
 
 - [Introduction](#introduction)
 - [Prerequisites](#prerequisites)
-- [Install the Behavior Editor](#install-the-behavior-editor)
+- [Install the StepIt Editor](#install-the-stepit-editor)
   - [Check out the Git Repository](#check-out-the-git-repository)
   - [Build the Project](#build-the-project)
 - [Running the Application](#running-the-application)
@@ -17,9 +17,9 @@
 
 ## Introduction
 
-The Behavior Editor is a web application to edit the behavior trees of [BehaviorTree.CPP](https://www.behaviortree.dev/) 4, the C++ library many robots use to decide what to do next. It opens a folder of behavior tree XML files and shows each tree as an indented list: we can add, move and configure nodes, fill in their ports and save the XML back. The trees are checked as we type, and BehaviorTree.CPP itself can load them to confirm they are valid.
+The StepIt Editor is a web application to edit the behavior trees of [BehaviorTree.CPP](https://www.behaviortree.dev/) 4, the C++ library many robots use to decide what to do next. It opens a folder of behavior tree XML files and shows each tree as an indented list: we can add, move and configure nodes, fill in their ports and save the XML back. The trees are checked as we type, and BehaviorTree.CPP itself can load them to confirm they are valid.
 
-![The behavior editor: the workspace on the left, the tree in the middle and the details of the selection on the right](docs/screenshot.png)
+![The StepIt Editor: the workspace on the left, the tree in the middle and the details of the selection on the right](docs/screenshot.png)
 
 ## Prerequisites
 
@@ -27,12 +27,12 @@ We need a computer with Ubuntu 24.04. The preferred way to run the editor is ins
 
 If you want to run the editor on your host machine instead, you must install [Node.js](https://nodejs.org/) 24 and enable pnpm with `corepack enable`. The validation by BehaviorTree.CPP is then skipped, unless the library is installed too.
 
-## Install the Behavior Editor
+## Install the StepIt Editor
 
 ### Check out the Git Repository
 
 ```
-git clone git@github.com:kineticsystem/behavior-editor.git
+git clone git@github.com:kineticsystem/stepit-editor.git
 ```
 
 ### Build the Project
@@ -109,11 +109,12 @@ We can open another folder from the editor too, by clicking the folder path at t
 
 - **Workspace** (left): **Objectives** lists the XML files of the folder and the trees in each. **Behaviors** lists our node types, declared in a `<TreeNodesModel>`, with how often each is used; click one to see its ports and where it is used, or drag it onto the tree. **Built-in nodes** lists BehaviorTree.CPP's own nodes (Sequence, Fallback, RetryUntilSuccessful…), which work the same way.
 - **Tree** (center): the selected tree as a collapsible list. Add nodes and SubTrees, drag them around, cut, copy, paste and undo. Open a SubTree to edit the tree it includes, and use the arrows at the top to go back. The **XML** tab shows the file as it will be saved.
+- **Disabling a node**: select it and press **D**, or click ⊘ in the toolbar or on its row, to keep it in the file without running it. The editor writes `_skipIf="true"`, so BehaviorTree.CPP skips the node, which returns SKIPPED, and greys it out together with everything below it. A node that already had a `_skipIf` condition keeps it, as `true || (condition)`, and gets it back when enabled again.
 - **Details** (right): the selected node's name, ports, scripts (`_skipIf`, `_onSuccess`…) and notes, or, with no node selected, the tree's ID, description and ports.
 
 ## Running a Tree on the Robot
 
-The **Run** button sends the open tree to a [BehaviorTree.ROS2](https://github.com/BehaviorTree/BehaviorTree.ROS2) server, which runs it on the robot. The editor talks to the server through [rosbridge](https://github.com/RobotWebTools/rosbridge_suite), so it needs no ROS itself; start rosbridge next to the server, e.g.:
+The **Run** button sends the open tree to a [BehaviorTree.ROS2](https://github.com/BehaviorTree/BehaviorTree.ROS2) server, which runs it on the robot. The editor talks to the server through [rosbridge](https://github.com/RobotWebTools/rosbridge_suite), so it needs no ROS itself. [StepIt Commander](https://github.com/kineticsystem/stepit-commander) starts rosbridge by default; with another server, start rosbridge next to it, e.g.:
 
 ```
 ros2 launch rosbridge_server rosbridge_websocket_launch.xml
@@ -164,7 +165,7 @@ behaviors/    example behaviors, the default folder
 src/shared/   XML model, parser and writer, workspace index, checks (browser and Node.js)
 src/server/   the HTTP API over the folder, and the runner of the native validator
 src/client/   the React editor
-src/cli/      validate.sh
+src/cli/      the command line validator, run by bin/validate.sh
 validator/    the BehaviorTree.CPP validator (C++)
 tests/        unit tests (vitest)
 ```

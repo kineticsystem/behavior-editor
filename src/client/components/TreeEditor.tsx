@@ -2,18 +2,19 @@
 // editing toolbar and the problems list.
 
 import { useState } from 'react';
-import { findTreeByUid, flatten } from '../../shared/treeOps';
+import { findTreeByUid, flatten, isDisabled, locate } from '../../shared/treeOps';
 import { prettyType } from '../../shared/builtins';
 import type { NodeModel } from '../../shared/types';
 import { models as docModels, newTree as createTree, trees } from '../../shared/xml';
 import {
-  copySelected, cutSelected, deleteSelected, duplicateSelected, paste, redo, save, shiftSelected, undo,
+  copySelected, cutSelected, deleteSelected, duplicateSelected, paste, redo, save, shiftSelected,
+  toggleDisabledSelected, undo,
 } from '../actions';
 import { ID_PATTERN, prompt } from '../dialogs';
 import type { Analysis } from '../hooks';
 import { type HistoryEntry, isDirty, useStore } from '../store';
 import { openAddDialog } from './AddNodeDialog';
-import { BadgeLegend, CategoryBadge, Icon } from './icons';
+import { CategoryBadge, Icon } from './icons';
 import { Problems } from './Problems';
 import { openRunDialog } from './RunDialog';
 import { Splitter, useStoredSize } from './Splitter';
@@ -111,6 +112,7 @@ export function TreeEditor({ analysis }: { analysis: Analysis }) {
   const tree = file?.doc && selection.tree ? findTreeByUid(file.doc, selection.tree) : undefined;
   const fileTrees = file?.doc ? trees(file.doc) : [];
   const hasNode = !!selection.node;
+  const selectedNode = tree && selection.node ? locate(tree, selection.node)?.node : undefined;
   const showXml = view === 'xml' || !!file?.error;
 
   const setAllCollapsed = (collapsed: boolean) => {
@@ -181,6 +183,10 @@ export function TreeEditor({ analysis }: { analysis: Analysis }) {
           <ToolButton icon="cut" label="Cut" shortcut="Ctrl+X" onClick={cutSelected} disabled={!hasNode} />
           <ToolButton icon="copy" label="Copy" shortcut="Ctrl+C" onClick={copySelected} disabled={!hasNode} />
           <ToolButton icon="paste" label="Paste" shortcut="Ctrl+V" onClick={() => paste(ws)} disabled={!clipboard} />
+          <ToolButton icon="disable" label={selectedNode && isDisabled(selectedNode) ? 'Enable' : 'Disable'} shortcut="D"
+            onClick={toggleDisabledSelected} disabled={!selectedNode}
+            tooltip={selectedNode && isDisabled(selectedNode) ? 'Enable: run the node again'
+              : 'Disable: skip the node and everything below it, through _skipIf'} />
           <ToolButton icon="trash" label="Delete" shortcut="Del" onClick={deleteSelected} disabled={!hasNode} />
           <span className="sep" />
           <ToolButton icon="expand" label="Expand all" onClick={() => setAllCollapsed(false)} />
@@ -194,10 +200,7 @@ export function TreeEditor({ analysis }: { analysis: Analysis }) {
         ) : showXml ? (
           <XmlView file={file} />
         ) : tree ? (
-          <>
-            <TreeView analysis={analysis} path={file.path} tree={tree} />
-            <BadgeLegend />
-          </>
+          <TreeView analysis={analysis} path={file.path} tree={tree} />
         ) : file.doc && docModels(file.doc).length ? (
           <ModelList models={docModels(file.doc)} onAddTree={() => void newTree(file.path, new Set(ws.trees.keys()))} />
         ) : (
