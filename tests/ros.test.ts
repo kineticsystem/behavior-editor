@@ -1,0 +1,81 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EXECUTE_TREE, runTree } from '../src/client/ros';
+
+/** A WebSocket that records what is sent, and lets the test answer. */
+class FakeSocket {
+  static OPEN = 1;
+  static last: FakeSocket;
+  readyState = 0;
+  sent: Record<string, unknown>[] = [];
+  onopen?: () => void;
+  onerror?: () => void;
+  onclose?: () => void;
+  onmessage?: (e: { data: string }) => void;
+  constructor(public url: string) {
+    FakeSocket.last = this;
+  }
+  send(data: string) {
+    this.sent.push(JSON.parse(data));
+  }
+  close() {
+    this.readyState = 3;
+  }
+  open() {
+    this.readyState = FakeSocket.OPEN;
+    this.onopen?.();
+  }
+  receive(msg: Record<string, unknown>) {
+    this.onmessage?.({ data: JSON.stringify(msg) });
+  }
+}
+
+describe('running a tree through rosbridge', () => {
+  beforeEach(() => vi.stubGlobal('WebSocket', FakeSocket));
+  afterEach(() => vi.unstubAllGlobals());
+
+  const start = (onFeedback = vi.fn()) =>
+    runTree({ url: 'ws://robot:9090', action: '/run', tree: 'Main', payload: 'speed: 1', onFeedback });
+
+  it('sends the goal, reports the feedback, and ends with the result', async () => {
+    const onFeedback = vi.fn();
+    const run = start(onFeedback);
+    const socket = FakeSocket.last;
+    socket.open();
+    const [goal] = socket.sent;
+    expect(goal).toMatchObject({
+      op: 'send_action_goal', action: '/run', action_type: EXECUTE_TREE, args: { target_tree: 'Main', payload: 'speed: 1' },
+    });
+    socket.receive({ op: 'action_feedback', id: 'someone else', values: { message: 'not ours' } });
+    socket.receive({ op: 'action_feedback', id: goal.id, values: { message: 'moving' } });
+    socket.receive({ op: 'action_result', id: goal.id, result: true, status: 4, values: { node_status: { status: 2 }, return_message: 'done' } });
+    expect(await run.result).toEqual({ ok: true, outcome: 'succeeded', treeStatus: 'SUCCESS', message: 'done' });
+    expect(onFeedback).toHaveBeenCalledExactlyOnceWith('moving');
+    expect(socket.readyState).toBe(3);
+  });
+
+  it('tells a failed tree from a goal that never ran', async () => {
+    const run = start();
+    FakeSocket.last.open();
+    const { id } = FakeSocket.last.sent[0];
+    FakeSocket.last.receive({ op: 'action_result', id, result: true, status: 6, values: { node_status: { status: 3 } } });
+    expect(await run.result).toMatchObject({ ok: false, outcome: 'aborted', treeStatus: 'FAILURE' });
+
+    const refused = start();
+    FakeSocket.last.open();
+    FakeSocket.last.receive({ op: 'status', id: FakeSocket.last.sent[0].id, msg: 'unknown action type' });
+    expect(await refused.result).toMatchObject({ ok: false, outcome: 'failed', message: 'unknown action type' });
+  });
+
+  it('fails when rosbridge cannot be reached', async () => {
+    const run = start();
+    FakeSocket.last.onerror?.();
+    expect(await run.result).toMatchObject({ ok: false, outcome: 'failed', message: expect.stringContaining('Cannot connect') });
+  });
+
+  it('cancels the goal', () => {
+    const run = start();
+    FakeSocket.last.open();
+    run.cancel();
+    expect(FakeSocket.last.sent[1]).toMatchObject({ op: 'cancel_action_goal', action: '/run', id: FakeSocket.last.sent[0].id });
+  });
+});

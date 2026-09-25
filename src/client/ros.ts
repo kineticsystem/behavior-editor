@@ -6,6 +6,8 @@
 //   ← action_result       how it ended; result: false when rosbridge failed
 //   → cancel_action_goal  stops it
 
+import { errorMessage } from './api';
+
 export const EXECUTE_TREE = 'btcpp_ros2_interfaces/action/ExecuteTree';
 
 /** GoalStatus of action_msgs. */
@@ -56,7 +58,7 @@ export function runTree(options: {
     try {
       socket = new WebSocket(options.url);
     } catch (e) {
-      settle({ ok: false, outcome: 'failed', message: `Invalid rosbridge URL ${options.url}: ${e instanceof Error ? e.message : e}` });
+      settle({ ok: false, outcome: 'failed', message: `Invalid rosbridge URL ${options.url}: ${errorMessage(e)}` });
       return;
     }
     socket.onopen = () => socket!.send(JSON.stringify({

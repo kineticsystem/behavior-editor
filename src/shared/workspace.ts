@@ -4,7 +4,8 @@
 // one file can use trees and node models of any other.
 
 import { BUILTIN_MODELS } from './builtins';
-import type { BehaviorTreeDef, BTNode, NodeCategory, NodeModel, ParsedFile } from './types';
+import { flatten } from './treeOps';
+import { type BehaviorTreeDef, type BTNode, isNodeTypeCategory, type NodeCategory, type NodeModel, type ParsedFile } from './types';
 import { models as docModels, trees as docTrees } from './xml';
 
 export interface TreeRef {
@@ -64,9 +65,7 @@ export function categoryOf(ws: Workspace, node: BTNode): NodeCategory | undefine
   const model = modelOf(ws, node.id);
   if (model) return model.category;
   // An undeclared node written in the explicit form still tells its category.
-  if (node.tag !== node.id && ['Action', 'Condition', 'Control', 'Decorator'].includes(node.tag)) {
-    return node.tag as NodeCategory;
-  }
+  if (node.tag !== node.id && isNodeTypeCategory(node.tag)) return node.tag;
   return undefined;
 }
 
@@ -75,12 +74,8 @@ export function findTree(ws: Workspace, id: string): TreeRef | undefined {
 }
 
 /** The trees referenced by SubTree nodes below `nodes`. */
-export function subtreeRefs(nodes: BTNode[], out: BTNode[] = []): BTNode[] {
-  for (const n of nodes) {
-    if (n.id === 'SubTree') out.push(n);
-    subtreeRefs(n.children, out);
-  }
-  return out;
+export function subtreeRefs(nodes: BTNode[]): BTNode[] {
+  return flatten(nodes).filter((n) => n.id === 'SubTree');
 }
 
 /** Which trees contain a SubTree node pointing at `treeId`. */
@@ -99,9 +94,7 @@ export function usagesOf(ws: Workspace, id: string): { ref: TreeRef; nodes: BTNo
   const out: { ref: TreeRef; nodes: BTNode[] }[] = [];
   for (const refs of ws.trees.values()) {
     for (const ref of refs) {
-      const nodes: BTNode[] = [];
-      const walk = (list: BTNode[]) => list.forEach((n) => { if (n.id === id) nodes.push(n); walk(n.children); });
-      walk(ref.tree.children);
+      const nodes = flatten(ref.tree.children).filter((n) => n.id === id);
       if (nodes.length) out.push({ ref, nodes });
     }
   }
@@ -113,6 +106,29 @@ export function customModels(ws: Workspace): NodeModel[] {
   return [...ws.models.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/** How many nodes of type `id` the workspace has, in all trees. */
+export function usageCount(ws: Workspace, id: string): number {
+  return usagesOf(ws, id).reduce((n, u) => n + u.nodes.length, 0);
+}
+
 export function allModels(ws: Workspace): NodeModel[] {
   return [...ws.builtins.values(), ...ws.models.values()];
+}
+
+/**
+ * The file where new node types are declared: the one that already declares
+ * the most, or `current` when none declares more than it.
+ */
+export function defaultModelsFile(files: ParsedFile[], current: string): string {
+  const count = (f?: ParsedFile) => (f?.doc ? docModels(f.doc).filter((m) => m.category !== 'SubTree').length : 0);
+  let best = current;
+  let most = count(files.find((f) => f.path === current));
+  for (const f of files) {
+    const n = count(f);
+    if (n > most) {
+      best = f.path;
+      most = n;
+    }
+  }
+  return best;
 }

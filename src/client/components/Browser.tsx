@@ -1,46 +1,36 @@
 // The left panel: the behavior files of the folder and the trees in each.
 
 import { useState } from 'react';
-import { customModels, usagesOf } from '../../shared/workspace';
+import { fileNameFor, filePathError, idError } from '../../shared/ids';
+import { CATEGORIES, isNodeTypeCategory, type NodeModel } from '../../shared/types';
+import { customModels, usageCount } from '../../shared/workspace';
 import { models, trees } from '../../shared/xml';
-import { confirm, ID_PATTERN, prompt } from '../dialogs';
-import { countBySeverity, useAnalysis } from '../hooks';
-import type { NodeModel } from '../../shared/types';
-import { type FileState, isDirty, useStore } from '../store';
-import { CategoryBadge, Counts, Icon } from './icons';
+import { treeIds } from '../actions';
+import { confirm, prompt } from '../dialogs';
 import { MODEL_MIME, setDraggedModel } from '../dnd';
+import { type Analysis, countBySeverity } from '../hooks';
+import { type FileState, isDirty, useStore } from '../store';
 import { openFolderDialog } from './FolderDialog';
+import { CategoryBadge, Counts, Icon } from './icons';
 import { SettingsMenu } from './SettingsMenu';
 import { Splitter, useStoredSize } from './Splitter';
 
 export async function newBehaviorFile() {
   const { files, createFile } = useStore.getState();
-  const existingTrees = new Set(Object.values(files).flatMap((f) => (f.doc ? trees(f.doc).map((t) => t.id) : [])));
+  const existing = treeIds();
   const values = await prompt('New objective', [
     {
       name: 'tree', label: 'Tree ID', placeholder: 'PickObject',
       hint: 'The ID other behaviors use to include it as a SubTree',
-      validate: (v) => (!ID_PATTERN.test(v) ? 'Letters, digits, _ . - only; not starting with a digit'
-        : existingTrees.has(v) ? 'A tree with this ID already exists' : undefined),
+      validate: (v) => idError(v, existing),
     },
     {
       name: 'file', label: 'File', placeholder: 'defaults to the tree ID, e.g. pick_object.xml',
       hint: 'Relative to the behaviors folder; may include sub-folders',
-      validate: (v, all) => {
-        const path = fileName(v, all.tree);
-        if (!/^[\w.\-/]+\.xml$/i.test(path) || path.split('/').includes('..')) return 'Use a relative .xml path';
-        return files[path] ? 'This file already exists' : undefined;
-      },
+      validate: (v, all) => filePathError(fileNameFor(v, all.tree), Object.keys(files)),
     },
   ], 'Create');
-  if (values) createFile(fileName(values.file, values.tree), values.tree);
-}
-
-/** The file name for a new tree: as typed, or derived from the tree ID. */
-function fileName(typed: string, treeId: string): string {
-  let name = typed.trim() || treeId.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
-  if (!name.toLowerCase().endsWith('.xml')) name += '.xml';
-  return name;
+  if (values) createFile(fileNameFor(values.file, values.tree), values.tree);
 }
 
 type SectionId = 'objectives' | 'behaviors' | 'builtins';
@@ -105,12 +95,12 @@ function SectionHeader({ title, count, open, onToggle, children }: {
   );
 }
 
-export function Browser() {
+export function Browser({ analysis }: { analysis: Analysis }) {
   const files = useStore((s) => s.files);
   const root = useStore((s) => s.root);
   const selection = useStore((s) => s.selection);
   const focusModel = useStore((s) => s.focusModel);
-  const { ws, byFile } = useAnalysis();
+  const { ws, byFile } = analysis;
   const [objectivesFilter, setObjectivesFilter] = useState('');
   const [behaviorsFilter, setBehaviorsFilter] = useState('');
   const [builtinsFilter, setBuiltinsFilter] = useState('');
@@ -148,7 +138,7 @@ export function Browser() {
   const builtins = [...ws.builtins.values()].filter((m) => m.category !== 'SubTree');
   const builtinsQuery = builtinsFilter.trim().toLowerCase();
   const shownBuiltins = builtinsQuery ? builtins.filter((m) => m.id.toLowerCase().includes(builtinsQuery)) : builtins;
-  const usage = new Map([...behaviors, ...builtins].map((m) => [m.id, usagesOf(ws, m.id).reduce((n, u) => n + u.nodes.length, 0)]));
+  const usage = new Map([...behaviors, ...builtins].map((m) => [m.id, usageCount(ws, m.id)]));
 
   return (
     <aside className="panel browser">
@@ -266,7 +256,7 @@ export function Browser() {
         )}
         {sections.builtins && (
           <ul className="file-list" aria-label="Built-in nodes">
-            {(['Control', 'Decorator', 'Action', 'Condition'] as const).map((category) => {
+            {CATEGORIES.filter(isNodeTypeCategory).map((category) => {
               const group = shownBuiltins.filter((m) => m.category === category).sort((a, b) => a.id.localeCompare(b.id));
               if (!group.length) return null;
               return (

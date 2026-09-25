@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import type { FoldersResponse } from '../../server/api';
-import { api } from '../api';
+import { api, errorMessage } from '../api';
 import { confirm, openDialog } from '../dialogs';
 import { isDirty, useStore } from '../store';
 import { Icon } from './icons';
@@ -20,7 +20,7 @@ function FolderDialog(props: { start: string; close: () => void }) {
       setTyped(next.path);
       setError(undefined);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     }
   };
   useEffect(() => void go(props.start), [props.start]);
@@ -28,7 +28,9 @@ function FolderDialog(props: { start: string; close: () => void }) {
   const join = (name: string) => (listing!.path.endsWith('/') ? listing!.path : listing!.path + '/') + name;
   const open = async () => {
     if (!listing) return;
-    const dirty = Object.values(useStore.getState().files).filter(isDirty).map((f) => f.path);
+    // Opening the folder already open keeps the edits, e.g. to save them after another tab opened another one.
+    const { files, root } = useStore.getState();
+    const dirty = listing.path === root ? [] : Object.values(files).filter(isDirty).map((f) => f.path);
     if (dirty.length && !await confirm('Discard unsaved changes?',
       <>These files have unsaved changes, which will be lost: {dirty.join(', ')}.</>, 'Discard and open')) return;
     props.close();

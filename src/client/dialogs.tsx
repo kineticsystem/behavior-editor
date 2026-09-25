@@ -117,9 +117,41 @@ export function confirm(title: string, message: ReactNode, action = 'Delete'): P
   });
 }
 
+export interface Choice<T extends string> {
+  value: T;
+  label: string;
+  kind?: 'primary' | 'danger';
+}
+
+function ChooseForm<T extends string>(props: { title: string; message: ReactNode; choices: Choice<T>[]; done: (value?: T) => void }) {
+  const cancel = useRef<HTMLButtonElement>(null);
+  useEffect(() => cancel.current?.focus(), []);
+  return (
+    <div onKeyDown={(e) => e.key === 'Escape' && props.done()}>
+      <h2>{props.title}</h2>
+      <p>{props.message}</p>
+      <div className="modal-actions">
+        <button ref={cancel} onClick={() => props.done()}>Cancel</button>
+        {props.choices.map((c) => (
+          <button key={c.value} className={c.kind} onClick={() => props.done(c.value)}>{c.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Asks to choose between a few actions; undefined when cancelled. The focus starts on Cancel. */
+export function choose<T extends string>(title: string, message: ReactNode, choices: Choice<T>[]): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    const done = (value?: T) => {
+      useDialog.getState().close();
+      resolve(value);
+    };
+    useDialog.getState().open(<ChooseForm title={title} message={message} choices={choices} done={done} />);
+  });
+}
+
 /** Opens arbitrary dialog content; the content calls the given close function. */
 export function openDialog(render: (close: () => void) => ReactNode) {
   useDialog.getState().open(render(() => useDialog.getState().close()));
 }
-
-export const ID_PATTERN = /^[A-Za-z_][\w.-]*$/;

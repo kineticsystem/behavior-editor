@@ -3,12 +3,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { canHaveChildren } from '../../shared/builtins';
+import { ID_PATTERN } from '../../shared/ids';
 import { findTreeByUid, locate } from '../../shared/treeOps';
-import { CATEGORIES, type NodeCategory, type NodeModel } from '../../shared/types';
-import { allModels, type Workspace } from '../../shared/workspace';
-import { models as docModels } from '../../shared/xml';
-import { addNode, declareModel, insertionPoint, wrapSelected } from '../actions';
-import { ID_PATTERN, openDialog } from '../dialogs';
+import { CATEGORIES, type NodeCategory, NODE_TYPE_CATEGORIES, type NodeTypeCategory } from '../../shared/types';
+import { allModels, defaultModelsFile, type Workspace } from '../../shared/workspace';
+import { addNewNodeType, addNode, insertionPoint, wrapSelected } from '../actions';
+import { openDialog } from '../dialogs';
 import { useStore } from '../store';
 import { CategoryBadge } from './icons';
 
@@ -23,21 +23,6 @@ interface Item {
   subtree?: string;
 }
 
-/** The file where new node types are declared: the one that already declares the most. */
-function defaultModelsFile(current: string): string {
-  const { files } = useStore.getState();
-  let best = current;
-  let count = files[current]?.doc ? docModels(files[current].doc!).filter((m) => m.category !== 'SubTree').length : 0;
-  for (const f of Object.values(files)) {
-    const n = f.doc ? docModels(f.doc).filter((m) => m.category !== 'SubTree').length : 0;
-    if (n > count) {
-      best = f.path;
-      count = n;
-    }
-  }
-  return best;
-}
-
 function AddNode({ ws, initial, close }: { ws: Workspace; initial: Filter; close: () => void }) {
   const selection = useStore((s) => s.selection);
   const files = useStore((s) => s.files);
@@ -45,7 +30,7 @@ function AddNode({ ws, initial, close }: { ws: Workspace; initial: Filter; close
   const [filter, setFilter] = useState<Filter>(initial);
   const [active, setActive] = useState(0);
   const [wrap, setWrap] = useState(false);
-  const [modelsFile, setModelsFile] = useState(() => defaultModelsFile(selection.file!));
+  const [modelsFile, setModelsFile] = useState(() => defaultModelsFile(Object.values(files), selection.file!));
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
 
@@ -103,12 +88,8 @@ function AddNode({ ws, initial, close }: { ws: Workspace; initial: Filter; close
     close();
   };
 
-  const create = (category: Exclude<NodeCategory, 'SubTree'>) => {
-    const id = query.trim();
-    declareModel(modelsFile, id, category);
-    const model: Pick<NodeModel, 'id' | 'category'> = { id, category };
-    if (wrapping && canHaveChildren(category)) wrapSelected(model);
-    else addNode(ws, model);
+  const create = (category: NodeTypeCategory) => {
+    addNewNodeType(ws, modelsFile, query.trim(), category, wrapping);
     close();
   };
 
@@ -154,7 +135,7 @@ function AddNode({ ws, initial, close }: { ws: Workspace; initial: Filter; close
             </select>
           </div>
           <div className="create-buttons">
-            {(['Action', 'Condition', 'Control', 'Decorator'] as const).map((c) => (
+            {NODE_TYPE_CATEGORIES.map((c) => (
               <button key={c} onClick={() => create(c)} disabled={wrapping && !canHaveChildren(c)}>
                 <CategoryBadge category={c} /> {c}
               </button>

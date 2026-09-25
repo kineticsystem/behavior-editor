@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
-import type { BehaviorTreeDef, BTNode, Issue } from '../shared/types';
-import { findTreeByUid, locate } from '../shared/treeOps';
+import type { Issue } from '../shared/types';
 import { validateWorkspace } from '../shared/validate';
 import { buildWorkspace, type Workspace } from '../shared/workspace';
-import { type FileState, useStore } from './store';
+import { useStore } from './store';
 
 export interface Analysis {
   ws: Workspace;
@@ -24,7 +23,10 @@ function group(issues: Issue[], key: (i: Issue) => string | undefined): Map<stri
   return out;
 }
 
-/** The workspace index and the editor's checks, recomputed on every edit. */
+/**
+ * The workspace index and the editor's checks, recomputed on every edit. The
+ * App calls it once and passes the result down: each call memoizes on its own.
+ */
 export function useAnalysis(): Analysis {
   const files = useStore((s) => s.files);
   const builtins = useStore((s) => s.builtins);
@@ -33,20 +35,6 @@ export function useAnalysis(): Analysis {
     const issues = validateWorkspace(ws);
     return { ws, issues, byNode: group(issues, (i) => i.nodeUid), byFile: group(issues, (i) => i.file) };
   }, [files, builtins]);
-}
-
-export interface Current {
-  file?: FileState;
-  tree?: BehaviorTreeDef;
-  node?: BTNode;
-}
-
-export function useCurrent(): Current {
-  const selection = useStore((s) => s.selection);
-  const file = useStore((s) => (selection.file ? s.files[selection.file] : undefined));
-  const tree = file?.doc && selection.tree ? findTreeByUid(file.doc, selection.tree) : undefined;
-  const node = tree && selection.node ? locate(tree, selection.node)?.node : undefined;
-  return { file, tree, node };
 }
 
 export function countBySeverity(issues: Issue[] | undefined) {

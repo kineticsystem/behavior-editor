@@ -5,8 +5,9 @@
 // does not understand (e.g. <include>) are kept verbatim.
 
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
-import type {
-  BehaviorTreeDef, BTDocument, BTNode, DocItem, NodeCategory, NodeModel, ParseError, PortDirection, PortModel,
+import {
+  type BehaviorTreeDef, type BTDocument, type BTNode, CATEGORIES, type DocItem, type NodeCategory, type NodeModel,
+  NODE_TYPE_CATEGORIES, type ParseError, type PortDirection, type PortModel,
 } from './types';
 
 // xmldom exports its own DOM types, which are not quite the lib.dom ones.
@@ -22,8 +23,8 @@ const ELEMENT_NODE = 1;
 const COMMENT_NODE = 8;
 
 /** The generic element names of the explicit form, <Action ID="..."/>. */
-const EXPLICIT_TAGS = new Set(['Action', 'Condition', 'Control', 'Decorator']);
-const MODEL_TAGS = new Set<string>(['Action', 'Condition', 'Control', 'Decorator', 'SubTree']);
+const EXPLICIT_TAGS = new Set<string>(NODE_TYPE_CATEGORIES);
+const MODEL_TAGS = new Set<string>(CATEGORIES);
 
 let nextUid = 1;
 export function newUid(): string {
@@ -286,7 +287,6 @@ export function serializeDocument(doc: BTDocument): string {
   return out.join('\n');
 }
 
-/** A new, empty behavior file with one tree. */
 /** A new tree, with a Sequence as its root, ready for nodes to be added to it. */
 export function newTree(treeId: string): BehaviorTreeDef {
   const root: BTNode = { uid: newUid(), id: 'Sequence', tag: 'Sequence', attrs: {}, children: [] };
@@ -307,4 +307,9 @@ export function trees(doc: BTDocument): BehaviorTreeDef[] {
 
 export function models(doc: BTDocument): NodeModel[] {
   return doc.items.flatMap((i) => (i.kind === 'models' ? i.models : []));
+}
+
+/** Whether a header comment says the file is generated, e.g. from the C++ nodes, and not to be edited by hand. */
+export function isGenerated(doc: BTDocument | undefined): boolean {
+  return !!doc?.prolog?.some((c) => /\bgenerated\b/i.test(c));
 }

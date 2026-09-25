@@ -2,9 +2,14 @@
 // when it loads a tree, plus a few that it only reports at runtime (missing
 // input ports, badly typed literals). The editor runs these on every change;
 // the native validator in validator/ is the authoritative second opinion.
+//
+// Each check is a Rule: an object with a hook for each level of the workspace
+// it looks at (a file, a model, a tree, a node, or the whole workspace).
+// validateWorkspace walks the workspace once and calls every rule's hooks. To
+// add a check, write a rule and add it to RULES.
 
 import { childrenRange, COMMON_ATTRIBUTES } from './builtins';
-import type { BehaviorTreeDef, BTNode, Issue, NodeModel, ParsedFile, PortModel, Severity } from './types';
+import type { BehaviorTreeDef, BTDocument, BTNode, Issue, NodeModel, ParsedFile, PortModel, Severity } from './types';
 import { buildWorkspace, categoryOf, modelOf, subtreeRefs, type Workspace } from './workspace';
 import { models as docModels, trees as docTrees } from './xml';
 
@@ -33,228 +38,132 @@ function literalTypeError(port: PortModel, value: string): string | undefined {
   return undefined;
 }
 
-class Checker {
-  issues: Issue[] = [];
-  constructor(private ws: Workspace) {}
+/** What a rule sees: the workspace, and a way to report an issue. */
+export interface Context {
+  ws: Workspace;
+  add(severity: Severity, file: string, message: string, extra?: Partial<Issue>): void;
+}
 
-  add(severity: Severity, file: string, message: string, extra: Partial<Issue> = {}) {
-    this.issues.push({ severity, file, message, source: 'editor', ...extra });
-  }
+/** Where a node is, to report its issues. */
+export interface NodeAt {
+  file: string;
+  tree: BehaviorTreeDef;
+  node: BTNode;
+  /** The location of the node, to spread into an issue. */
+  at: Partial<Issue>;
+}
 
-  run() {
-    for (const f of this.ws.files) this.checkFile(f);
-    this.checkDuplicateTrees();
-    this.checkModelConflicts();
-    this.checkRecursion();
-    return this.issues;
-  }
+export interface Rule {
+  file?(ctx: Context, path: string, doc: BTDocument): void;
+  model?(ctx: Context, file: string, model: NodeModel): void;
+  tree?(ctx: Context, file: string, tree: BehaviorTreeDef): void;
+  node?(ctx: Context, at: NodeAt): void;
+  /** Checks across files, run after every file was visited. */
+  workspace?(ctx: Context): void;
+}
 
-  checkFile(f: ParsedFile) {
-    if (!f.doc) {
-      this.add('error', f.path, f.error?.message ?? 'The file cannot be read', { line: f.error?.line });
-      return;
-    }
-    const { rootAttrs } = f.doc;
-    const trees = docTrees(f.doc);
+// ---------------------------------------------------------------------------
+// Files
+
+const rootAttributes: Rule = {
+  file({ ws, add }, path, doc) {
+    const { rootAttrs } = doc;
+    const trees = docTrees(doc);
     const format = rootAttrs.BTCPP_format;
     if (format === undefined) {
-      if (trees.length) this.add('warning', f.path, '<root> has no BTCPP_format="4" attribute');
+      if (trees.length) add('warning', path, '<root> has no BTCPP_format="4" attribute');
     } else if (format !== '4') {
-      this.add('error', f.path, `BTCPP_format="${format}" is not supported: BehaviorTree.CPP 4 reads format 4 only`);
+      add('error', path, `BTCPP_format="${format}" is not supported: BehaviorTree.CPP 4 reads format 4 only`);
     }
 
     const main = rootAttrs.main_tree_to_execute;
     if (main !== undefined) {
       if (!trees.some((t) => t.id === main)) {
-        const elsewhere = this.ws.trees.get(main)?.[0];
+        const elsewhere = ws.trees.get(main)?.[0];
         if (elsewhere) {
-          this.add('warning', f.path, `main_tree_to_execute "${main}" is defined in ${elsewhere.file}, not in this file`);
+          add('warning', path, `main_tree_to_execute "${main}" is defined in ${elsewhere.file}, not in this file`);
         } else {
-          this.add('error', f.path, `main_tree_to_execute refers to the unknown tree "${main}"`);
+          add('error', path, `main_tree_to_execute refers to the unknown tree "${main}"`);
         }
       }
     } else if (trees.length > 1) {
-      this.add('warning', f.path,
+      add('warning', path,
         'The file has several trees but no main_tree_to_execute: createTreeFromFile() cannot tell which one to run');
     }
+  },
+};
 
-    for (const m of docModels(f.doc)) this.checkModel(f.path, m);
-    for (const t of trees) this.checkTree(f.path, t);
-  }
+// ---------------------------------------------------------------------------
+// Models
 
-  checkModel(file: string, m: NodeModel) {
+const modelDeclarations: Rule = {
+  model({ ws, add }, file, m) {
     if (!m.id) {
-      this.add('error', file, `A <${m.category}> in TreeNodesModel has no ID`);
+      add('error', file, `A <${m.category}> in TreeNodesModel has no ID`);
       return;
     }
-    if (m.category !== 'SubTree' && this.ws.builtins.has(m.id)) {
-      this.add('error', file, `The model "${m.id}" redefines a built-in node of BehaviorTree.CPP`);
+    if (m.category !== 'SubTree' && ws.builtins.has(m.id)) {
+      add('error', file, `The model "${m.id}" redefines a built-in node of BehaviorTree.CPP`);
     }
     const seen = new Set<string>();
     for (const p of m.ports) {
-      if (!p.name) this.add('error', file, `A port of the model "${m.id}" has no name`);
-      else if (seen.has(p.name)) this.add('error', file, `The model "${m.id}" declares the port "${p.name}" twice`);
+      if (!p.name) add('error', file, `A port of the model "${m.id}" has no name`);
+      else if (seen.has(p.name)) add('error', file, `The model "${m.id}" declares the port "${p.name}" twice`);
       else if (p.name === 'name' || p.name === 'ID' || p.name.startsWith('_')) {
-        this.add('error', file, `The model "${m.id}" uses the reserved port name "${p.name}"`);
+        add('error', file, `The model "${m.id}" uses the reserved port name "${p.name}"`);
       }
       seen.add(p.name);
     }
-  }
+  },
+};
 
-  checkTree(file: string, tree: BehaviorTreeDef) {
+const modelConflicts: Rule = {
+  workspace({ ws, add }) {
+    const signature = (m: NodeModel) =>
+      JSON.stringify([m.category, m.ports.map((p) => [p.direction, p.name, p.type ?? '', p.default ?? ''])]);
+    for (const [id, decls] of ws.modelDeclarations) {
+      if (decls.length < 2) continue;
+      const first = signature(decls[0]);
+      for (const d of decls.slice(1)) {
+        if (signature(d) !== first) add('warning', d.file!, `The model "${id}" is declared differently in ${decls[0].file}`);
+      }
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Trees
+
+const treeRoots: Rule = {
+  tree({ add }, file, tree) {
     const where = { tree: tree.id, line: tree.line };
-    if (!tree.id) this.add('error', file, '<BehaviorTree> has no ID', where);
+    if (!tree.id) add('error', file, '<BehaviorTree> has no ID', where);
     if (tree.children.length === 0) {
-      this.add('error', file, `The tree "${tree.id}" is empty: it needs exactly one root node`, where);
+      add('error', file, `The tree "${tree.id}" is empty: it needs exactly one root node`, where);
     } else if (tree.children.length > 1) {
-      this.add('error', file, `The tree "${tree.id}" has ${tree.children.length} root nodes: it needs exactly one`, where);
+      add('error', file, `The tree "${tree.id}" has ${tree.children.length} root nodes: it needs exactly one`, where);
     }
-    for (const n of tree.children) this.checkNode(file, tree, n);
-  }
+  },
+};
 
-  checkNode(file: string, tree: BehaviorTreeDef, node: BTNode) {
-    const at = { tree: tree.id, nodeUid: node.uid, line: node.line };
-    const model = modelOf(this.ws, node.id);
-    const category = categoryOf(this.ws, node);
-
-    if (!model) {
-      this.add('error', file,
-        `Unknown node "${node.id}": it is not built into BehaviorTree.CPP nor declared in any TreeNodesModel`, at);
-    } else if (node.tag !== node.id && node.tag !== 'SubTree' && node.tag !== model.category) {
-      this.add('error', file, `"${node.id}" is a ${model.category}, but it is written as <${node.tag}>`, at);
-    }
-
-    if (category) {
-      const [min, max] = childrenRange(category, node.id);
-      const n = node.children.length;
-      if (n < min || n > max) {
-        let expected: string;
-        if (max === 0) expected = 'no children';
-        else if (min === max) expected = `exactly ${min} ${min === 1 ? 'child' : 'children'}`;
-        else if (max === Infinity) expected = `at least ${min} ${min === 1 ? 'child' : 'children'}`;
-        else expected = `${min} to ${max} children`;
-        this.add('error', file, `${category} "${node.id}" must have ${expected}, but has ${n}`, at);
-      }
-    }
-
-    if (node.id === 'SubTree') this.checkSubTree(file, node, at);
-    else if (model) this.checkPorts(file, node, model, at);
-
-    for (const [name, value] of Object.entries(node.attrs)) {
-      if (name in COMMON_ATTRIBUTES && name.startsWith('_') && name !== '_description' && name !== '_uid') {
-        if (!value.trim()) this.add('warning', file, `The script ${name} is empty`, at);
-      }
-    }
-
-    for (const c of node.children) this.checkNode(file, tree, c);
-  }
-
-  checkPorts(file: string, node: BTNode, model: NodeModel, at: Partial<Issue>) {
-    const ports = new Map(model.ports.map((p) => [p.name, p]));
-    for (const [name, value] of Object.entries(node.attrs)) {
-      if (name === 'name') continue;
-      if (name.startsWith('_')) {
-        if (!(name in COMMON_ATTRIBUTES)) this.add('warning', file, `Unknown special attribute "${name}"`, at);
-        continue;
-      }
-      const port = ports.get(name);
-      if (!port) {
-        this.add('error', file, `"${node.id}" has no port "${name}"`, at);
-        continue;
-      }
-      this.checkValue(file, node, port, value, at);
-    }
-    for (const p of model.ports) {
-      if (p.name in node.attrs) continue;
-      if (p.direction !== 'output' && p.default === undefined) {
-        this.add('warning', file, `The input port "${p.name}" of "${node.id}" is not set and has no default`, at);
-      }
-    }
-  }
-
-  checkValue(file: string, node: BTNode, port: PortModel, value: string, at: Partial<Issue>) {
-    const v = value.trim();
-    if (isBlackboardRef(v)) {
-      const key = v.slice(1, -1).trim();
-      if (!key) this.add('error', file, `The port "${port.name}" of "${node.id}" refers to an empty blackboard key`, at);
-      else if (key !== '=' && !/^@?[A-Za-z_][\w.:/-]*$/.test(key)) {
-        this.add('warning', file, `The port "${port.name}" of "${node.id}" refers to the unusual blackboard key "${key}"`, at);
-      }
-      return;
-    }
-    if (port.direction !== 'input') {
-      this.add('error', file,
-        `The ${port.direction} port "${port.name}" of "${node.id}" must be a blackboard reference such as {${port.name}}`, at);
-      return;
-    }
-    if (/[{}]/.test(v) && port.type !== 'std::string' && !/Script|Precondition/.test(node.id)) {
-      this.add('warning', file,
-        `The port "${port.name}" of "${node.id}" contains braces but is not a blackboard reference: use {key} as the whole value`, at);
-    }
-    if (v === '') {
-      if (port.type && port.type !== 'std::string') {
-        this.add('warning', file, `The port "${port.name}" of "${node.id}" is empty`, at);
-      }
-      return;
-    }
-    const typeError = literalTypeError(port, v);
-    if (typeError) this.add('error', file, `The port "${port.name}" of "${node.id}" ${typeError}, not "${value}"`, at);
-  }
-
-  checkSubTree(file: string, node: BTNode, at: Partial<Issue>) {
-    const target = node.attrs.ID;
-    if (!target) {
-      this.add('error', file, 'A SubTree has no ID: it must name the tree to instantiate', at);
-      return;
-    }
-    if (!this.ws.trees.has(target)) {
-      this.add('error', file, `The SubTree refers to the unknown tree "${target}"`, at);
-    }
-    const autoremap = node.attrs._autoremap;
-    if (autoremap !== undefined && !BOOLEANS.includes(autoremap.trim())) {
-      this.add('error', file, `_autoremap must be true or false, not "${autoremap}"`, at);
-    }
-    const model = this.ws.subtreeModels.get(target);
-    if (!model) return;
-    const ports = new Set(model.ports.map((p) => p.name));
-    for (const name of Object.keys(node.attrs)) {
-      if (name === 'ID' || name === 'name' || name.startsWith('_')) continue;
-      if (!ports.has(name)) {
-        this.add('warning', file, `The tree "${target}" does not declare the port "${name}" in its TreeNodesModel`, at);
-      }
-    }
-  }
-
-  checkDuplicateTrees() {
-    for (const [id, refs] of this.ws.trees) {
+const duplicateTrees: Rule = {
+  workspace({ ws, add }) {
+    for (const [id, refs] of ws.trees) {
       if (!id || refs.length < 2) continue;
       const files = refs.map((r) => r.file).join(', ');
       for (const r of refs) {
-        this.add('error', r.file, `The tree ID "${id}" is defined ${refs.length} times (${files})`,
-          { tree: id, line: r.tree.line });
+        add('error', r.file, `The tree ID "${id}" is defined ${refs.length} times (${files})`, { tree: id, line: r.tree.line });
       }
     }
-  }
+  },
+};
 
-  checkModelConflicts() {
-    for (const [id, decls] of this.ws.modelDeclarations) {
-      if (decls.length < 2) continue;
-      const signature = (m: NodeModel) =>
-        JSON.stringify([m.category, m.ports.map((p) => [p.direction, p.name, p.type ?? '', p.default ?? ''])]);
-      const first = signature(decls[0]);
-      for (const d of decls.slice(1)) {
-        if (signature(d) !== first) {
-          this.add('warning', d.file!, `The model "${id}" is declared differently in ${decls[0].file}`);
-        }
-      }
-    }
-  }
-
-  /** A tree that includes itself, directly or not, can never be instantiated. */
-  checkRecursion() {
+/** A tree that includes itself, directly or not, can never be instantiated. */
+const recursion: Rule = {
+  workspace({ ws, add }) {
     const state = new Map<string, 'visiting' | 'done'>();
     const visit = (id: string, stack: string[]) => {
-      const ref = this.ws.trees.get(id)?.[0];
+      const ref = ws.trees.get(id)?.[0];
       if (!ref || state.get(id) === 'done') return;
       state.set(id, 'visiting');
       for (const n of subtreeRefs(ref.tree.children)) {
@@ -263,19 +172,162 @@ class Checker {
         if (state.get(target) === 'visiting') {
           const path = [...stack, id];
           const cycle = [...path.slice(path.indexOf(target)), target].join(' → ');
-          this.add('error', ref.file, `Recursive SubTree: ${cycle}`, { tree: id, nodeUid: n.uid, line: n.line });
+          add('error', ref.file, `Recursive SubTree: ${cycle}`, { tree: id, nodeUid: n.uid, line: n.line });
         } else {
           visit(target, [...stack, id]);
         }
       }
       state.set(id, 'done');
     };
-    for (const id of this.ws.trees.keys()) visit(id, []);
+    for (const id of ws.trees.keys()) visit(id, []);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Nodes
+
+const nodeTypes: Rule = {
+  node({ ws, add }, { file, node, at }) {
+    const model = modelOf(ws, node.id);
+    if (!model) {
+      add('error', file, `Unknown node "${node.id}": it is not built into BehaviorTree.CPP nor declared in any TreeNodesModel`, at);
+    } else if (node.tag !== node.id && node.tag !== 'SubTree' && node.tag !== model.category) {
+      add('error', file, `"${node.id}" is a ${model.category}, but it is written as <${node.tag}>`, at);
+    }
+  },
+};
+
+const childCount: Rule = {
+  node({ ws, add }, { file, node, at }) {
+    const category = categoryOf(ws, node);
+    if (!category) return;
+    const [min, max] = childrenRange(category, node.id);
+    const n = node.children.length;
+    if (n >= min && n <= max) return;
+    const children = (k: number) => `${k} ${k === 1 ? 'child' : 'children'}`;
+    let expected: string;
+    if (max === 0) expected = 'no children';
+    else if (min === max) expected = `exactly ${children(min)}`;
+    else if (max === Infinity) expected = `at least ${children(min)}`;
+    else expected = `${min} to ${max} children`;
+    add('error', file, `${category} "${node.id}" must have ${expected}, but has ${n}`, at);
+  },
+};
+
+function checkValue({ add }: Context, file: string, node: BTNode, port: PortModel, value: string, at: Partial<Issue>) {
+  const where = { ...at, attribute: port.name };
+  const v = value.trim();
+  if (isBlackboardRef(v)) {
+    const key = v.slice(1, -1).trim();
+    if (!key) add('error', file, `The port "${port.name}" of "${node.id}" refers to an empty blackboard key`, where);
+    else if (key !== '=' && !/^@?[A-Za-z_][\w.:/-]*$/.test(key)) {
+      add('warning', file, `The port "${port.name}" of "${node.id}" refers to the unusual blackboard key "${key}"`, where);
+    }
+    return;
   }
+  if (port.direction !== 'input') {
+    add('error', file,
+      `The ${port.direction} port "${port.name}" of "${node.id}" must be a blackboard reference such as {${port.name}}`, where);
+    return;
+  }
+  if (/[{}]/.test(v) && port.type !== 'std::string' && !/Script|Precondition/.test(node.id)) {
+    add('warning', file,
+      `The port "${port.name}" of "${node.id}" contains braces but is not a blackboard reference: use {key} as the whole value`, where);
+  }
+  if (v === '') {
+    if (port.type && port.type !== 'std::string') add('warning', file, `The port "${port.name}" of "${node.id}" is empty`, where);
+    return;
+  }
+  const typeError = literalTypeError(port, v);
+  if (typeError) add('error', file, `The port "${port.name}" of "${node.id}" ${typeError}, not "${value}"`, where);
 }
 
-export function validateWorkspace(ws: Workspace): Issue[] {
-  return new Checker(ws).run();
+/** The ports of a node that is not a SubTree: known, set, and well typed. */
+const ports: Rule = {
+  node(ctx, { file, node, at }) {
+    const model = modelOf(ctx.ws, node.id);
+    if (node.id === 'SubTree' || !model) return;
+    const byName = new Map(model.ports.map((p) => [p.name, p]));
+    for (const [name, value] of Object.entries(node.attrs)) {
+      if (name === 'name') continue;
+      if (name.startsWith('_')) {
+        if (!(name in COMMON_ATTRIBUTES)) ctx.add('warning', file, `Unknown special attribute "${name}"`, { ...at, attribute: name });
+        continue;
+      }
+      const port = byName.get(name);
+      if (!port) ctx.add('error', file, `"${node.id}" has no port "${name}"`, { ...at, attribute: name });
+      else checkValue(ctx, file, node, port, value, at);
+    }
+    for (const p of model.ports) {
+      if (p.name in node.attrs || p.direction === 'output' || p.default !== undefined) continue;
+      ctx.add('warning', file, `The input port "${p.name}" of "${node.id}" is not set and has no default`, { ...at, attribute: p.name });
+    }
+  },
+};
+
+const subtrees: Rule = {
+  node({ ws, add }, { file, node, at }) {
+    if (node.id !== 'SubTree') return;
+    const target = node.attrs.ID;
+    if (!target) {
+      add('error', file, 'A SubTree has no ID: it must name the tree to instantiate', { ...at, attribute: 'ID' });
+      return;
+    }
+    if (!ws.trees.has(target)) add('error', file, `The SubTree refers to the unknown tree "${target}"`, { ...at, attribute: 'ID' });
+    const autoremap = node.attrs._autoremap;
+    if (autoremap !== undefined && !BOOLEANS.includes(autoremap.trim())) {
+      add('error', file, `_autoremap must be true or false, not "${autoremap}"`, { ...at, attribute: '_autoremap' });
+    }
+    const model = ws.subtreeModels.get(target);
+    if (!model) return;
+    const declared = new Set(model.ports.map((p) => p.name));
+    for (const name of Object.keys(node.attrs)) {
+      if (name === 'ID' || name === 'name' || name.startsWith('_') || declared.has(name)) continue;
+      add('warning', file, `The tree "${target}" does not declare the port "${name}" in its TreeNodesModel`, { ...at, attribute: name });
+    }
+  },
+};
+
+const emptyScripts: Rule = {
+  node({ add }, { file, node, at }) {
+    for (const [name, value] of Object.entries(node.attrs)) {
+      if (!(name in COMMON_ATTRIBUTES) || !name.startsWith('_') || name === '_description' || name === '_uid') continue;
+      if (!value.trim()) add('warning', file, `The script ${name} is empty`, { ...at, attribute: name });
+    }
+  },
+};
+
+/** Every check, in the order their issues are reported for the same element. */
+export const RULES: Rule[] = [
+  rootAttributes, modelDeclarations, treeRoots, nodeTypes, childCount, ports, subtrees, emptyScripts,
+  duplicateTrees, modelConflicts, recursion,
+];
+
+export function validateWorkspace(ws: Workspace, rules: Rule[] = RULES): Issue[] {
+  const issues: Issue[] = [];
+  const ctx: Context = {
+    ws,
+    add: (severity, file, message, extra = {}) => issues.push({ severity, file, message, source: 'editor', ...extra }),
+  };
+  const visitNode = (file: string, tree: BehaviorTreeDef, node: BTNode) => {
+    const at: NodeAt = { file, tree, node, at: { tree: tree.id, nodeUid: node.uid, line: node.line } };
+    for (const r of rules) r.node?.(ctx, at);
+    for (const c of node.children) visitNode(file, tree, c);
+  };
+  for (const f of ws.files) {
+    if (!f.doc) {
+      ctx.add('error', f.path, f.error?.message ?? 'The file cannot be read', { line: f.error?.line });
+      continue;
+    }
+    for (const r of rules) r.file?.(ctx, f.path, f.doc);
+    for (const m of docModels(f.doc)) for (const r of rules) r.model?.(ctx, f.path, m);
+    for (const t of docTrees(f.doc)) {
+      for (const r of rules) r.tree?.(ctx, f.path, t);
+      for (const n of t.children) visitNode(f.path, t, n);
+    }
+  }
+  for (const r of rules) r.workspace?.(ctx);
+  return issues;
 }
 
 export function validateFiles(files: ParsedFile[], builtins?: NodeModel[]): Issue[] {

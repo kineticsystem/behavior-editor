@@ -2,7 +2,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Issue } from '../src/shared/types';
-import { validateFiles } from '../src/shared/validate';
+import { type Rule, validateFiles, validateWorkspace } from '../src/shared/validate';
+import { buildWorkspace } from '../src/shared/workspace';
 import { prettyType } from '../src/shared/builtins';
 import { parseDocument } from '../src/shared/xml';
 
@@ -117,6 +118,42 @@ describe('validateFiles', () => {
   it('reports models that redefine built-in nodes', () => {
     expect(check({ 'a.xml': '<root BTCPP_format="4"><TreeNodesModel><Action ID="Sequence"/></TreeNodesModel></root>' })
       .map((i) => i.message)).toEqual(['The model "Sequence" redefines a built-in node of BehaviorTree.CPP']);
+  });
+});
+
+describe('issues', () => {
+  const issuesOf = (body: string) => check({
+    'a.xml': `<root BTCPP_format="4" main_tree_to_execute="T"><BehaviorTree ID="T">${body}</BehaviorTree>${MODELS}</root>`,
+  });
+
+  it('name the attribute at fault, to mark its field', () => {
+    const byMessage = Object.fromEntries(issuesOf('<MoveTo height="3" speed="fast" _bogus="" _onSuccess=" "/>')
+      .map((i) => [i.message, i.attribute]));
+    expect(byMessage).toEqual({
+      '"MoveTo" has no port "height"': 'height',
+      'The port "speed" of "MoveTo" expects a number (double), not "fast"': 'speed',
+      'Unknown special attribute "_bogus"': '_bogus',
+      'The input port "goal" of "MoveTo" is not set and has no default': 'goal',
+      'The script _onSuccess is empty': '_onSuccess',
+    });
+  });
+
+  it('about the node itself name no attribute', () => {
+    const [issue] = issuesOf('<Fly/>');
+    expect(issue.attribute).toBeUndefined();
+    expect(issue.nodeUid).toBeDefined();
+  });
+});
+
+describe('rules', () => {
+  it('can be replaced or extended', () => {
+    const noSleep: Rule = {
+      node: (ctx, { file, node, at }) => {
+        if (node.id === 'Sleep') ctx.add('warning', file, 'Sleeping on the job', at);
+      },
+    };
+    const ws = buildWorkspace([{ path: 'a.xml', ...parseDocument('<root><BehaviorTree ID="T"><Sleep/></BehaviorTree></root>') }]);
+    expect(validateWorkspace(ws, [noSleep]).map((i) => i.message)).toEqual(['Sleeping on the job']);
   });
 });
 
