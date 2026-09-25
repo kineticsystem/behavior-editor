@@ -20,7 +20,8 @@ import { type Analysis, countBySeverity } from '../hooks';
 import { getDraggedModel, setDraggedModel } from '../dnd';
 import { useStore } from '../store';
 import { openAddDialog } from './AddNodeDialog';
-import { CategoryBadge, Counts, Icon } from './icons';
+import { Counts, Icon } from './icons';
+import { attrsTooltip, NodeLabel } from './NodeLabel';
 
 interface Row {
   key: string;
@@ -68,12 +69,6 @@ function buildRows(ws: Workspace, file: string, tree: BehaviorTreeDef,
   };
   if (treeOpen) walk(tree.children, 1, { file, tree }, false, '', tree.uid, [tree.id], false);
   return rows;
-}
-
-/** The attributes of a node, one per line, for the row's tooltip; the right panel shows them in full. */
-function attrsTooltip(node: BTNode): string | undefined {
-  const entries = Object.entries(node.attrs).filter(([k]) => k !== '_uid' && !(node.id === 'SubTree' && k === 'ID'));
-  return entries.length ? entries.map(([k, v]) => `${k} = ${v}`).join('\n') : undefined;
 }
 
 function IssueMarker({ issues }: { issues?: Issue[] }) {
@@ -265,9 +260,7 @@ export function TreeView({ analysis, path, tree }: { analysis: Analysis; path: s
               </>
             ) : node!.id === 'SubTree' ? (
               <>
-                <CategoryBadge category="SubTree" />
-                <span className="node-id">{node!.attrs.ID || <i className="muted">no tree</i>}</span>
-                {node!.attrs.name && <span className="node-name">“{node!.attrs.name}”</span>}
+                <NodeLabel node={node!} />
                 {row.target && !row.readonly && (
                   <button className="icon-button row-action" title="Open this tree (double-click)" tabIndex={-1}
                     onClick={(e) => { e.stopPropagation(); navigate(row); }}>
@@ -276,11 +269,7 @@ export function TreeView({ analysis, path, tree }: { analysis: Analysis; path: s
                 )}
               </>
             ) : (
-              <>
-                <CategoryBadge category={category} />
-                <span className="node-id">{node!.id}</span>
-                {node!.attrs.name && node!.attrs.name !== node!.id && <span className="node-name">“{node!.attrs.name}”</span>}
-              </>
+              <NodeLabel node={node!} category={category} />
             )}
             <span className="row-spacer" />
             <IssueMarker issues={issues} />

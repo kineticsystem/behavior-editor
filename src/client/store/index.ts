@@ -3,6 +3,7 @@
 
 import { create } from 'zustand';
 import { documentsSlice } from './documents';
+import { executionSlice } from './execution';
 import { navigationSlice } from './navigation';
 import type { State } from './types';
 import { uiSlice } from './ui';
@@ -11,7 +12,8 @@ export const useStore = create<State>()((...a) => ({
   ...documentsSlice(...a),
   ...navigationSlice(...a),
   ...uiSlice(...a),
+  ...executionSlice(...a),
 }));
 
 export { contentOf, defaultTree, hasDirtyFiles, isDirty, serialized, workspaceFingerprint } from './documents';
-export type { FileState, HistoryEntry, Peek, SaveResult, Selection, State } from './types';
+export type { Execution, FileState, HistoryEntry, Peek, SaveResult, Selection, State } from './types';

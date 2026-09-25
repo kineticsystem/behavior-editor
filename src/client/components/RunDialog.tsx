@@ -1,57 +1,44 @@
 // Runs the open tree on a BehaviorTree.ROS2 server, through rosbridge: a form
-// for the payload the tree reads, then the messages of the server and the end.
+// for the payload the tree reads and the connection. Running saves the files,
+// closes the dialog and shows the execution in place of the tree editor.
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { payloadKeys, payloadText } from '../../shared/payload';
 import type { Workspace } from '../../shared/workspace';
-import { saveAll } from '../actions';
+import { saveAll, startRun } from '../actions';
 import { openDialog } from '../dialogs';
-import { defaultRosbridgeUrl, type Run, type RunResult, runTree } from '../ros';
+import { defaultRosbridgeUrl } from '../ros';
 import { useSettings } from '../settings';
-import { useStore } from '../store';
 import { Icon } from './icons';
-
-type Phase = { kind: 'form' } | { kind: 'running' } | { kind: 'done'; result: RunResult };
 
 function RunForm({ treeId, keys, close }: { treeId: string; keys: string[]; close: () => void }) {
   const settings = useSettings();
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(keys.map((k) => [k, settings.payloads[treeId]?.[k] ?? ''])));
-  const [phase, setPhase] = useState<Phase>({ kind: 'form' });
-  const [feedback, setFeedback] = useState<string[]>([]);
-  const run = useRef<Run>(undefined);
-  const mounted = useRef(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
   const url = settings.rosbridgeUrl.trim() || defaultRosbridgeUrl();
-
-  // Closing the dialog leaves the tree running; its end is then shown as a toast.
-  useEffect(() => () => { mounted.current = false; }, []);
 
   const start = async () => {
     settings.update({ payloads: { ...settings.payloads, [treeId]: values } });
+    setSaving(true);
     // The server runs the files on disk.
-    if (!await saveAll()) {
-      setPhase({ kind: 'done', result: { ok: false, outcome: 'failed', message: 'Some files could not be saved, so the tree was not run.' } });
+    const saved = await saveAll();
+    setSaving(false);
+    if (!saved) {
+      setError('Some files could not be saved, so the tree was not run.');
       return;
     }
-    setFeedback([]);
-    setPhase({ kind: 'running' });
-    run.current = runTree({
-      url, action: settings.runAction.trim(), tree: treeId, payload: payloadText(values),
-      onFeedback: (message) => mounted.current && setFeedback((f) => [...f, message]),
-    });
-    const result = await run.current.result;
-    run.current = undefined;
-    if (mounted.current) setPhase({ kind: 'done', result });
-    else useStore.getState().toast(`${treeId}: ${summary(result)}`, result.ok ? undefined : 'error');
+    close();
+    startRun({ url, action: settings.runAction.trim(), treeId, payload: payloadText(values) });
   };
 
-  const running = phase.kind === 'running';
   return (
-    <form className="run-dialog" onSubmit={(e) => { e.preventDefault(); if (!running) void start(); }}
+    <form className="run-dialog" onSubmit={(e) => { e.preventDefault(); if (!saving) void start(); }}
       onKeyDown={(e) => e.key === 'Escape' && close()}>
       <h2><Icon name="play" size={15} /> Run {treeId}</h2>
 
-      <fieldset className="bare run-payload" disabled={running}>
+      <fieldset className="bare run-payload" disabled={saving}>
         {keys.length ? keys.map((key, i) => (
           <label key={key} className="field">
             <span className="field-label"><span className="port-name">@{key}</span></span>
@@ -64,7 +51,7 @@ function RunForm({ treeId, keys, close }: { treeId: string; keys: string[]; clos
 
       <details className="run-connection">
         <summary>Connection: {url} · {settings.runAction}</summary>
-        <fieldset className="bare" disabled={running}>
+        <fieldset className="bare" disabled={saving}>
           <label className="field">
             <span>rosbridge URL</span>
             <input className="mono" value={settings.rosbridgeUrl} placeholder={defaultRosbridgeUrl()} spellCheck={false}
@@ -79,33 +66,16 @@ function RunForm({ treeId, keys, close }: { treeId: string; keys: string[]; clos
         </fieldset>
       </details>
 
-      {phase.kind !== 'form' && (
-        <div className="run-output" role="status">
-          {running && <div className="run-state">Running…</div>}
-          {phase.kind === 'done' && (
-            <div className={`run-state ${phase.result.ok ? 'ok' : 'failed'}`}>{summary(phase.result)}</div>
-          )}
-          {!!feedback.length && <ul className="run-feedback mono">{feedback.map((f, i) => <li key={i}>{f}</li>)}</ul>}
-          {phase.kind === 'done' && phase.result.message && <pre className="run-message">{phase.result.message}</pre>}
-        </div>
-      )}
+      {error && <div className="run-output run-state failed" role="alert">{error}</div>}
 
       <div className="modal-actions">
-        <button type="button" onClick={close}>{running ? 'Hide' : 'Close'}</button>
-        {running
-          ? <button type="button" className="danger" onClick={() => run.current?.cancel()}>Stop</button>
-          : <button type="submit" className="primary"><Icon name="play" size={14} /> {phase.kind === 'done' ? 'Run again' : 'Run'}</button>}
+        <button type="button" onClick={close}>Cancel</button>
+        <button type="submit" className="primary" disabled={saving}>
+          <Icon name="play" size={14} /> {saving ? 'Saving…' : 'Run'}
+        </button>
       </div>
     </form>
   );
-}
-
-function summary(r: RunResult): string {
-  if (r.outcome === 'failed') return 'Could not run the tree';
-  if (r.outcome === 'canceled') return 'Stopped';
-  if (r.ok) return 'Succeeded';
-  if (r.outcome === 'aborted') return r.treeStatus === 'FAILURE' ? 'The tree failed' : 'Aborted';
-  return `The tree returned ${r.treeStatus ?? 'no status'}`;
 }
 
 export function openRunDialog(ws: Workspace, treeId: string) {

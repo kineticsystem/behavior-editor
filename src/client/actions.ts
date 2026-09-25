@@ -12,6 +12,7 @@ import type { BehaviorTreeDef, BTDocument, BTNode, NodeModel, NodeTypeCategory }
 import { categoryOf, type Workspace } from '../shared/workspace';
 import { newTree as createTree, trees } from '../shared/xml';
 import { choose } from './dialogs';
+import { type Run, runTree } from './ros';
 import { hasDirtyFiles, isDirty, type SaveResult, useStore } from './store';
 
 function current() {
@@ -281,6 +282,35 @@ export async function saveAll(): Promise<boolean> {
     if (isDirty(f)) await saveFile(f.path);
   }
   return !hasDirtyFiles(useStore.getState().files);
+}
+
+// ---------------------------------------------------------------------------
+// Running
+
+/** The run in progress, to stop it. */
+let currentRun: Run | undefined;
+
+/**
+ * Runs a tree on the server, through rosbridge, and shows its execution in
+ * place of the tree editor. The files must be saved first: the server runs
+ * them as they are on disk.
+ */
+export function startRun(options: { url: string; action: string; treeId: string; payload: string }) {
+  useStore.getState().startExecution(options.treeId);
+  const run = runTree({
+    url: options.url, action: options.action, tree: options.treeId, payload: options.payload,
+    onFeedback: (message) => useStore.getState().applyFeedback(message),
+  });
+  currentRun = run;
+  void run.result.then((result) => {
+    if (currentRun === run) currentRun = undefined;
+    useStore.getState().endExecution(result);
+  });
+}
+
+/** Asks the server to stop the run in progress; it then ends as stopped. */
+export function stopRun() {
+  currentRun?.cancel();
 }
 
 export function undo() {
