@@ -360,6 +360,7 @@ button.root-path:hover > svg:last-child { opacity: 1; }
 .exec-status.exec-running { color: var(--accent); font-weight: 600; }
 .exec-status.exec-success { color: var(--ok); }
 .exec-status.exec-failure { color: var(--error); font-weight: 600; }
+.exec-status.exec-halted, .exec-status.exec-skipped { color: var(--muted); }
 .row.exec-row-running { background-color: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .row.exec-row-failure { background-color: var(--error-soft); box-shadow: inset 3px 0 0 var(--error); }
 .execution-log { max-height: 30%; }

@@ -15,11 +15,11 @@ import { Icon } from './icons';
 import { attrsTooltip, NodeLabel } from './NodeLabel';
 
 const STATUS_LABELS: Record<ExecutionStatus, string> = {
-  RUNNING: 'Running', SUCCESS: 'Success', FAILURE: 'Failure', SKIPPED: 'Skipped',
+  RUNNING: 'Running', SUCCESS: 'Success', FAILURE: 'Failure', SKIPPED: 'Skipped', HALTED: 'Halted',
 };
 
 const STATUS_ICONS: Record<ExecutionStatus, string> = {
-  RUNNING: '●', SUCCESS: '✓', FAILURE: '✕', SKIPPED: '–',
+  RUNNING: '●', SUCCESS: '✓', FAILURE: '✕', SKIPPED: '–', HALTED: '■',
 };
 
 /**
@@ -135,7 +135,7 @@ export function ExecutionPanel({ analysis }: { analysis: Analysis }) {
             const className = [
               'row',
               status ? `exec-row-${status.toLowerCase()}` : 'exec-row-idle',
-              status === 'SKIPPED' ? 'skipped' : '',
+              status === 'SKIPPED' || status === 'HALTED' ? 'skipped' : '',
             ].join(' ');
             return (
               <div key={row.key} data-key={row.key} className={className} role="treeitem"

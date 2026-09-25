@@ -41,6 +41,10 @@ describe('parseFeedback', () => {
       .toEqual({ tree: '<root/>', nodes: { 1: 'RUNNING', 2: 'FAILURE' } });
   });
 
+  it('reads a halted node', () => {
+    expect(parseFeedback('{"nodes": {"7": "HALTED"}}')?.nodes).toEqual({ 7: 'HALTED' });
+  });
+
   it('leaves out unknown statuses', () => {
     expect(parseFeedback('{"nodes": {"1": "IDLE", "2": "SUCCESS", "3": 4}}')).toEqual({ tree: undefined, nodes: { 2: 'SUCCESS' } });
   });
@@ -97,6 +101,11 @@ describe('the executed tree', () => {
     expect(causes.map(executionKey)).toEqual(['8', '9']);
   });
 
+  it('does not count a halted node as a failure', () => {
+    const statuses: Record<string, string> = { 1: 'FAILURE', 2: 'HALTED', 3: 'HALTED', 6: 'FAILURE', 7: 'FAILURE', 8: 'FAILURE' };
+    expect(failureCauses(tree, (node) => statuses[executionKey(node)] as never).map(executionKey)).toEqual(['8']);
+  });
+
   it('refuses a document that is not XML', () => {
     expect(parseExecutedTree('not xml')).toBeUndefined();
   });
@@ -115,6 +124,13 @@ describe('the execution in the store', () => {
     expect(s().execution?.tree?.root.id).toBe('Main');
     expect(s().execution?.statuses).toEqual({ 1: 'RUNNING', 2: 'SUCCESS', 4: 'FAILURE' });
     expect(s().execution?.messages).toEqual(['a plain message']);
+  });
+
+  it('marks the nodes still running when the run ends as halted', () => {
+    s().startExecution('Main');
+    s().applyFeedback(JSON.stringify({ tree: EXECUTED, nodes: { 1: 'RUNNING', 2: 'SUCCESS', 3: 'RUNNING' } }));
+    s().endExecution({ ok: false, outcome: 'canceled', message: '' });
+    expect(s().execution?.statuses).toEqual({ 1: 'HALTED', 2: 'SUCCESS', 3: 'HALTED' });
   });
 
   it('marks the node that threw as failed', () => {
