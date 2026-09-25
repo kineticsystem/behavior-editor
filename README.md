@@ -1,4 +1,4 @@
-# Behavior Editor
+# StepIt Editor
 
 ## Table of Contents <!-- omit in toc -->
 
