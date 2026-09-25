@@ -1,9 +1,8 @@
 // Parsing and writing BehaviorTree.CPP v4 XML files.
 //
-// The writer produces the same layout as Groot2: two-space indentation, one
-// element per line. Comments are kept, attached to the element that follows
-// them, and elements the editor does not understand (e.g. <include>) are kept
-// verbatim.
+// The writer uses two-space indentation and one element per line. Comments
+// are kept, attached to the element that follows them, and elements the editor
+// does not understand (e.g. <include>) are kept verbatim.
 
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import type {

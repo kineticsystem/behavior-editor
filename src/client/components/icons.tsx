@@ -31,6 +31,7 @@ const paths: Record<string, string> = {
   search: 'M7 12A5 5 0 107 2a5 5 0 000 10zM10.5 10.5L14 14',
   wrap: 'M2.5 4.5v7M13.5 4.5v7M5.5 6.5h5v3h-5z',
   close: 'M4 4l8 8M12 4l-8 8',
+  disable: 'M8 14A6 6 0 108 2a6 6 0 000 12zM3.8 3.8l8.4 8.4',
   play: 'M5 3l8 5-8 5z',
   cog: 'M8 10.2a2.2 2.2 0 100-4.4 2.2 2.2 0 000 4.4zM6.9 1.8h2.2l.4 1.8 1.2.5 1.6-1 1.5 1.5-1 1.6.5 1.2 1.8.4v2.2l-1.8.4-.5 1.2 1 1.6-1.5 1.5-1.6-1-1.2.5-.4 1.8H6.9l-.4-1.8-1.2-.5-1.6 1-1.5-1.5 1-1.6-.5-1.2-1.8-.4V6.9l1.8-.4.5-1.2-1-1.6 1.5-1.5 1.6 1 1.2-.5z',
 };
@@ -54,28 +55,6 @@ export function CategoryBadge({ category, plain = false }: { category?: NodeCate
     <span className={`badge cat-${category ?? 'Unknown'}`} title={plain ? undefined : category ?? 'Unknown node type'}>
       {category ? LETTERS[category] : '!'}
     </span>
-  );
-}
-
-const LEGEND: { category?: NodeCategory; label: string }[] = [
-  { category: 'Control', label: 'Control' },
-  { category: 'Decorator', label: 'Decorator' },
-  { category: 'Action', label: 'Action' },
-  { category: 'Condition', label: 'Condition' },
-  { category: 'SubTree', label: 'SubTree' },
-  { label: 'Unknown' },
-];
-
-/** What the category badges mean. */
-export function BadgeLegend() {
-  return (
-    <div className="legend" aria-label="Legend">
-      {LEGEND.map((e) => (
-        <span key={e.label} className="legend-item">
-          <CategoryBadge category={e.category} plain /> {e.label}
-        </span>
-      ))}
-    </div>
   );
 }
 

@@ -115,7 +115,7 @@ export const BUILTIN_MODELS: NodeModel[] = [
 
 /** Attributes accepted by every node, besides its ports. */
 export const COMMON_ATTRIBUTES: Record<string, string> = {
-  name: 'Instance name, shown in logs and Groot',
+  name: 'Instance name, shown in logs',
   _skipIf: 'Skip the node if the script is true',
   _failureIf: 'Return FAILURE instead of ticking if the script is true',
   _successIf: 'Return SUCCESS instead of ticking if the script is true',
@@ -125,7 +125,7 @@ export const COMMON_ATTRIBUTES: Record<string, string> = {
   _onHalted: 'Script executed when the node is halted',
   _post: 'Script executed when the node completes',
   _description: 'Free text description',
-  _uid: 'Unique ID assigned by Groot',
+  _uid: 'Unique ID of the node, assigned by some editors',
 };
 
 export const SCRIPT_ATTRIBUTES = ['_skipIf', '_failureIf', '_successIf', '_while', '_onSuccess', '_onFailure', '_onHalted', '_post'];

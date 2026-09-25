@@ -252,7 +252,7 @@ function NodeInspector({ analysis, path, tree, node, readOnly = false }: {
 
       <Section title="Node">
         <TextField label="Instance name" value={node.attrs.name} placeholder={isSubTree ? node.attrs.ID : node.id}
-          onChange={(v) => set('name', v)} hint="Optional; shown in logs and in Groot" />
+          onChange={(v) => set('name', v)} hint="Optional; shown in logs" />
         {isSubTree && (
           <>
             <div className="field">

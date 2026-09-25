@@ -98,6 +98,23 @@ export function setAttr(node: { attrs: Record<string, string> }, name: string, v
   else node.attrs[name] = value;
 }
 
+/**
+ * Whether the node is disabled: BehaviorTree.CPP never runs it, because its
+ * _skipIf is `true`, or `true || (…)` around the condition it had before.
+ */
+export function isDisabled(node: BTNode): boolean {
+  const skipIf = node.attrs._skipIf?.trim();
+  return skipIf === 'true' || !!skipIf?.startsWith('true || (');
+}
+
+/** Disables or enables the node through _skipIf, keeping the condition it had, if any. */
+export function setDisabled(node: BTNode, disabled: boolean) {
+  const skipIf = node.attrs._skipIf?.trim();
+  if (disabled === isDisabled(node)) return;
+  if (disabled) setAttr(node, '_skipIf', skipIf ? `true || (${skipIf})` : 'true');
+  else setAttr(node, '_skipIf', skipIf === 'true' ? undefined : skipIf!.slice('true || ('.length, -1));
+}
+
 /** Renames attributes while keeping their order. */
 export function renameAttr(node: { attrs: Record<string, string> }, from: string, to: string) {
   node.attrs = Object.fromEntries(Object.entries(node.attrs).map(([k, v]) => [k === from ? to : k, v]));

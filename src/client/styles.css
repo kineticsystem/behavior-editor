@@ -330,6 +330,7 @@ button.root-path:hover > svg:last-child { opacity: 1; }
 .row.readonly { opacity: 0.62; font-style: italic; }
 .row.uses-model { background-color: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .row.readonly .node-id { font-weight: 500; }
+.row.skipped .badge, .row.skipped .node-id, .row.skipped .node-name { opacity: 0.4; filter: grayscale(1); }
 .row-tree .node-id { font-size: 13.5px; }
 .node-id { font-weight: 600; }
 .node-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
@@ -346,14 +347,6 @@ button.root-path:hover > svg:last-child { opacity: 1; }
 
 
 .empty-tree { padding: 24px 32px; color: var(--muted); }
-
-.legend {
-  display: flex; flex-wrap: wrap; gap: 4px 14px; flex: none;
-  padding: 6px 12px; border-top: 1px solid var(--border);
-  color: var(--muted); font-size: 11.5px;
-}
-.legend-item { display: inline-flex; align-items: center; gap: 5px; }
-.legend .badge { width: 15px; height: 15px; font-size: 9.5px; border-radius: 4px; }
 
 .model-list { flex: 1; overflow: auto; padding: 12px 20px 24px; }
 .model-list section { margin-bottom: 18px; }
